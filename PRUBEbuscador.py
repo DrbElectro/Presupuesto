@@ -5,7 +5,7 @@ from datetime import date
 
 EXCEL_PATH = "Proveedores.xlsx"
 
-# ----------- Presupuesto ----------------
+# ========== Presupuesto ==========
 def solapa_presupuesto(precios_df, costos_df, clave_estado="presupuesto_items", titulo="Presupuesto"):
     st.subheader(titulo)
     precios_df.columns = precios_df.columns.str.strip()
@@ -14,6 +14,7 @@ def solapa_presupuesto(precios_df, costos_df, clave_estado="presupuesto_items", 
     if clave_estado not in st.session_state:
         st.session_state[clave_estado] = []
 
+    # Buscador general (marca/modelo)
     busqueda = st.text_input("Buscar modelo, parte del modelo o marca", key=titulo+"buscador").strip().upper()
     precios_filtrados = precios_df.copy()
     if busqueda:
@@ -101,22 +102,22 @@ def solapa_presupuesto(precios_df, costos_df, clave_estado="presupuesto_items", 
         if st.button(f"Limpiar {titulo}"):
             st.session_state[clave_estado] = []
 
-# ============================
-#         NUEVO PEDIDO
-# ============================
+# ========== Carga catálogo solo una vez ==========
 @st.cache_data
 def load_catalogue():
     df = pd.read_excel(EXCEL_PATH)
     df.columns = df.columns.str.strip()
     return df
 
-# --------- UI PRINCIPAL EN TABS ---------
-st.title("Gestión de Presupuestos y Pedidos")
+# ========== TABS ==========
+st.title("Presupuestos y Pedidos")
 
-tab1, tab2 = st.tabs(["Presupuesto", "Nuevo Pedido"])
+tab1, tab2 = st.tabs([
+    "Presupuesto",
+    "Pedido"
+])
 
 with tab1:
-    # -- Cargar datos --
     try:
         costos_df = pd.read_excel(EXCEL_PATH)
         precios10_df = pd.read_excel(EXCEL_PATH, sheet_name="10%")
@@ -124,19 +125,11 @@ with tab1:
     except Exception as e:
         st.error(f"No se pudo leer el archivo: {e}")
         st.stop()
-
-    st.header("Presupuesto")
-    subtab1, subtab2 = st.tabs(["Presupuesto Final", "Revendedores"])
-    with subtab1:
-        solapa_presupuesto(precios10_df, costos_df, clave_estado="presupuesto_items", titulo="Presupuesto")
-    with subtab2:
-        solapa_presupuesto(precios5_df, costos_df, clave_estado="presupuesto_revend", titulo="Presupuesto Revendedores")
+    solapa_presupuesto(precios10_df, costos_df, clave_estado="presupuesto_items", titulo="Presupuesto")
+    solapa_presupuesto(precios5_df, costos_df, clave_estado="presupuesto_revend", titulo="Presupuesto Revendedores")
 
 with tab2:
     df_cat = load_catalogue()
-
-    st.header("Nuevo Pedido")
-
     if "pedido_items" not in st.session_state:
         st.session_state["pedido_items"] = []
 
@@ -149,33 +142,32 @@ with tab2:
         proveedor = c3.text_input("Proveedor", key="item_proveedor_manual")
         color     = c5.text_input("Color", key="item_color_manual")
         costo_usd = c6.number_input("Costo USD", 0.0, format="%.2f", key="item_costo_usd_manual")
-        
-else:
-    marcas_disponibles = sorted(df_cat["Marca"].dropna().unique())
-    if marcas_disponibles:
-        marca = c1.selectbox("Marca", marcas_disponibles, key="item_marca")
-        modelos_disponibles = sorted(df_cat[df_cat["Marca"]==marca]["Modelo"].dropna().unique())
-        if modelos_disponibles:
-            modelo = c2.selectbox("Modelo", modelos_disponibles, key="item_modelo")
-            row = df_cat.query("Marca==@marca and Modelo==@modelo")
-            if not row.empty:
-                row = row.iloc[0]
-                provs = [p for p in ("Ale","Eze","Di") if pd.notna(row.get(p))]
-                proveedor = c3.selectbox("Proveedor", provs, key="item_proveedor")
-                color = c5.text_input("Color", key="item_color")
-                costo_usd = c6.number_input("Costo USD", float(row[proveedor]), format="%.2f", key="item_costo_usd")
+    else:
+        marcas_disponibles = sorted(df_cat["Marca"].dropna().unique())
+        if marcas_disponibles:
+            marca = c1.selectbox("Marca", marcas_disponibles, key="item_marca")
+            modelos_disponibles = sorted(df_cat[df_cat["Marca"]==marca]["Modelo"].dropna().unique())
+            if modelos_disponibles:
+                modelo = c2.selectbox("Modelo", modelos_disponibles, key="item_modelo")
+                row = df_cat.query("Marca==@marca and Modelo==@modelo")
+                if not row.empty:
+                    row = row.iloc[0]
+                    provs = [p for p in ("Ale","Eze","Di") if pd.notna(row.get(p))]
+                    proveedor = c3.selectbox("Proveedor", provs, key="item_proveedor")
+                    color = c5.text_input("Color", key="item_color")
+                    costo_usd = c6.number_input("Costo USD", float(row[proveedor]), format="%.2f", key="item_costo_usd")
+                else:
+                    c3.write("No hay datos para ese modelo.")
+                    proveedor = color = ""
+                    costo_usd = 0.0
             else:
-                c3.write("No hay datos para ese modelo.")
-                proveedor = color = ""
+                c2.write("No hay modelos para esa marca.")
+                modelo = proveedor = color = ""
                 costo_usd = 0.0
         else:
-            c2.write("No hay modelos para esa marca.")
-            modelo = proveedor = color = ""
+            c1.write("No hay marcas disponibles.")
+            marca = modelo = proveedor = color = ""
             costo_usd = 0.0
-    else:
-        c1.write("No hay marcas disponibles.")
-        marca = modelo = proveedor = color = ""
-        costo_usd = 0.0
 
     cantidad = c4.number_input("Cantidad", min_value=1, value=1, key="item_cantidad")
 
