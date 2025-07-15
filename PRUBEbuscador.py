@@ -1,8 +1,9 @@
 import streamlit as st
 import pandas as pd
 import re
+from datetime import date
 
-EXCEL_PATH = 'Proveedores.xlsx'
+EXCEL_PATH = r'G:\Mi unidad\Proveedores\Final\Proveedores.xlsx'
 
 def solapa_presupuesto(precios_df, costos_df, clave_estado="presupuesto_items", titulo="Presupuesto"):
     st.subheader(titulo)
@@ -100,6 +101,71 @@ def solapa_presupuesto(precios_df, costos_df, clave_estado="presupuesto_items", 
         if st.button(f"Limpiar {titulo}"):
             st.session_state[clave_estado] = []
 
+# ============================
+#         NUEVO PEDIDO
+# ============================
+def pedido_online():
+    st.subheader("Pedido (solo online, sin Excel)")
+
+    if "pedido_items_online" not in st.session_state:
+        st.session_state["pedido_items_online"] = []
+
+    st.markdown("#### Agregar ítem al pedido")
+    c1, c2, c3 = st.columns([2, 2, 1])
+    marca    = c1.text_input("Marca", key="item_marca_online")
+    modelo   = c2.text_input("Modelo", key="item_modelo_online")
+    cantidad = c3.number_input("Cantidad", min_value=1, value=1, key="item_cantidad_online")
+
+    if st.button("➕ Agregar ítem", key="add_item_btn_online"):
+        st.session_state["pedido_items_online"].append({
+            "marca": marca,
+            "modelo": modelo,
+            "cantidad": cantidad
+        })
+        st.success(f"{cantidad}× {marca} {modelo} agregado.")
+
+    if st.session_state["pedido_items_online"]:
+        st.markdown("**Ítems en este pedido:**")
+        for i, itm in enumerate(st.session_state["pedido_items_online"], 1):
+            st.write(f"{i}. {itm['cantidad']}× {itm['marca']} {itm['modelo']}")
+
+    # Datos del pedido
+    d1, d2 = st.columns(2)
+    nombre  = d1.text_input("Nombre del cliente", key="np_nombre_online")
+    celular = d2.text_input("Celular", key="np_celular_online")
+    tipo_entrega = st.radio("Tipo de entrega", ["Envío", "Retiro"], horizontal=True, key="np_tipo_entrega_online")
+    direccion = st.text_input("Dirección (si aplica)", key="np_direccion_online")
+    aclaracion = st.text_area("Aclaraciones (opcional)", key="np_aclaracion_online")
+
+    if st.button("💾 Descargar Pedido (TXT)", key="save_pedido_btn_online"):
+        today_str = date.today().strftime("%d-%m-%Y")
+        tipo_txt = "Envio" if tipo_entrega == "Envío" else "Retiro"
+        contenido = f"{tipo_txt}:\n\n"
+        for itm in st.session_state["pedido_items_online"]:
+            contenido += f"{itm['cantidad']}× {itm['marca'].upper()} {itm['modelo'].upper()}\n"
+        if tipo_entrega == "Envío":
+            contenido += f"\nDirección: {direccion}\n"
+        if aclaracion:
+            contenido += f"\n{aclaracion}\n"
+        contenido += f"\nCliente: {nombre} – {celular}\n"
+        txt_name = f"Pedido {today_str}.txt"
+
+        st.download_button("📄 Descargar TXT del Pedido", data=contenido, file_name=txt_name)
+
+    if st.button("🧹 Limpiar pedido", key="clear_pedido_online"):
+        st.session_state["pedido_items_online"] = []
+        st.session_state["item_marca_online"] = ""
+        st.session_state["item_modelo_online"] = ""
+        st.session_state["item_cantidad_online"] = 1
+        st.session_state["np_nombre_online"] = ""
+        st.session_state["np_celular_online"] = ""
+        st.session_state["np_direccion_online"] = ""
+        st.session_state["np_aclaracion_online"] = ""
+        st.success("Pedido limpio.")
+
+# ================
+#   MAIN TABS
+# ================
 try:
     costos_df = pd.read_excel(EXCEL_PATH)
     precios10_df = pd.read_excel(EXCEL_PATH, sheet_name="10%")
@@ -108,11 +174,12 @@ except Exception as e:
     st.error(f"No se pudo leer el archivo: {e}")
     st.stop()
 
-st.title("🔎 Presupuestos")
+st.title("🔎 Presupuestos y Pedidos")
 
-tab1, tab2 = st.tabs([
+tab1, tab2, tab3 = st.tabs([
     "Presupuesto",
-    "Presupuesto Revendedores"
+    "Presupuesto Revendedores",
+    "Pedido (solo online)"
 ])
 
 with tab1:
@@ -120,3 +187,6 @@ with tab1:
 
 with tab2:
     solapa_presupuesto(precios5_df, costos_df, clave_estado="presupuesto_revend", titulo="Presupuesto Revendedores")
+
+with tab3:
+    pedido_online()
