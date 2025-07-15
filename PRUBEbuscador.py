@@ -3,7 +3,7 @@ import pandas as pd
 import re
 from datetime import date
 
-EXCEL_PATH = Proveedores.xlsx'
+EXCEL_PATH = "Proveedores.xlsx"
 
 def solapa_presupuesto(precios_df, costos_df, clave_estado="presupuesto_items", titulo="Presupuesto"):
     st.subheader(titulo)
