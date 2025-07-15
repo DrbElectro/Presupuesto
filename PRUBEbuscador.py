@@ -104,17 +104,17 @@ def solapa_presupuesto(precios_df, costos_df, clave_estado="presupuesto_items", 
 # ============================
 #         NUEVO PEDIDO
 # ============================
-import streamlit as st
+# ============================
+#         NUEVO PEDIDO
+# ============================
 import pandas as pd
 from datetime import date
 
-EXCEL_PATH = "Proveedores.xlsx"  # o "data/Proveedores.xlsx" si lo ponés ahí
+EXCEL_PATH = "Proveedores.xlsx"  # debe estar en la raíz del repo
 
-# Carga catálogo de productos
 @st.cache_data
 def load_catalogue():
     df = pd.read_excel(EXCEL_PATH)
-    # Asegura nombres de columna limpios
     df.columns = df.columns.str.strip()
     return df
 
