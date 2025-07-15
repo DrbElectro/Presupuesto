@@ -149,15 +149,33 @@ with tab2:
         proveedor = c3.text_input("Proveedor", key="item_proveedor_manual")
         color     = c5.text_input("Color", key="item_color_manual")
         costo_usd = c6.number_input("Costo USD", 0.0, format="%.2f", key="item_costo_usd_manual")
+else:
+    marcas_disponibles = sorted(df_cat["Marca"].dropna().unique())
+    if marcas_disponibles:
+        marca = c1.selectbox("Marca", marcas_disponibles, key="item_marca")
+        modelos_disponibles = sorted(df_cat[df_cat["Marca"]==marca]["Modelo"].dropna().unique())
+        if modelos_disponibles:
+            modelo = c2.selectbox("Modelo", modelos_disponibles, key="item_modelo")
+            row = df_cat.query("Marca==@marca and Modelo==@modelo")
+            if not row.empty:
+                row = row.iloc[0]
+                provs = [p for p in ("Ale","Eze","Di") if pd.notna(row.get(p))]
+                proveedor = c3.selectbox("Proveedor", provs, key="item_proveedor")
+                color = c5.text_input("Color", key="item_color")
+                costo_usd = c6.number_input("Costo USD", float(row[proveedor]), format="%.2f", key="item_costo_usd")
+            else:
+                c3.write("No hay datos para ese modelo.")
+                proveedor = color = ""
+                costo_usd = 0.0
+        else:
+            c2.write("No hay modelos para esa marca.")
+            modelo = proveedor = color = ""
+            costo_usd = 0.0
     else:
-        marca     = c1.selectbox("Marca", sorted(df_cat["Marca"].unique()), key="item_marca")
-        modelos   = sorted(df_cat[df_cat["Marca"]==marca]["Modelo"].unique())
-        modelo    = c2.selectbox("Modelo", modelos, key="item_modelo")
-        row       = df_cat.query("Marca==@marca and Modelo==@modelo").iloc[0]
-        provs     = [p for p in ("Ale","Eze","Di") if pd.notna(row.get(p))]
-        proveedor = c3.selectbox("Proveedor", provs, key="item_proveedor")
-        color     = c5.text_input("Color", key="item_color")
-        costo_usd = c6.number_input("Costo USD", float(row[proveedor]), format="%.2f", key="item_costo_usd")
+        c1.write("No hay marcas disponibles.")
+        marca = modelo = proveedor = color = ""
+        costo_usd = 0.0
+
     cantidad = c4.number_input("Cantidad", min_value=1, value=1, key="item_cantidad")
 
     if st.button("➕ Agregar ítem", key="add_item_btn"):
