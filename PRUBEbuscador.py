@@ -110,7 +110,7 @@ def load_catalogue():
     return df
 
 # ========== UI PRINCIPAL ===========
-st.title("Herramienta DRB Electro")
+st.title("DRB Electro")
 
 tab1, tab2, tab3 = st.tabs([
     "Presupuesto",
