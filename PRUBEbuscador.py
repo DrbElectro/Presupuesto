@@ -149,6 +149,7 @@ with tab2:
         proveedor = c3.text_input("Proveedor", key="item_proveedor_manual")
         color     = c5.text_input("Color", key="item_color_manual")
         costo_usd = c6.number_input("Costo USD", 0.0, format="%.2f", key="item_costo_usd_manual")
+        
 else:
     marcas_disponibles = sorted(df_cat["Marca"].dropna().unique())
     if marcas_disponibles:
