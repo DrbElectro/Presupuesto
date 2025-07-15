@@ -5,7 +5,7 @@ from datetime import date
 
 EXCEL_PATH = "Proveedores.xlsx"
 
-# ========== Presupuesto (Función única para ambos) ==========
+# ---------- SOLAPA PRESUPUESTO -----------
 def solapa_presupuesto(precios_df, costos_df, clave_estado="presupuesto_items", titulo="Presupuesto"):
     st.subheader(titulo)
     precios_df.columns = precios_df.columns.str.strip()
@@ -102,15 +102,15 @@ def solapa_presupuesto(precios_df, costos_df, clave_estado="presupuesto_items", 
         if st.button(f"Limpiar {titulo}"):
             st.session_state[clave_estado] = []
 
-# ========== Carga catálogo solo una vez ==========
+# ============ PEDIDO =============
 @st.cache_data
 def load_catalogue():
     df = pd.read_excel(EXCEL_PATH)
     df.columns = df.columns.str.strip()
     return df
 
-# ========== 3 SOLAPAS ==========
-st.title("Presupuestos y Pedidos")
+# ========== UI PRINCIPAL ===========
+st.title("Herramienta DRB Electro")
 
 tab1, tab2, tab3 = st.tabs([
     "Presupuesto",
@@ -118,6 +118,7 @@ tab1, tab2, tab3 = st.tabs([
     "Pedido"
 ])
 
+# --------- Solapa 1: Presupuesto -----------
 with tab1:
     try:
         costos_df = pd.read_excel(EXCEL_PATH)
@@ -127,6 +128,7 @@ with tab1:
         st.stop()
     solapa_presupuesto(precios10_df, costos_df, clave_estado="presupuesto_items", titulo="Presupuesto")
 
+# --------- Solapa 2: Revendedores -----------
 with tab2:
     try:
         costos_df = pd.read_excel(EXCEL_PATH)
@@ -136,6 +138,7 @@ with tab2:
         st.stop()
     solapa_presupuesto(precios5_df, costos_df, clave_estado="presupuesto_revend", titulo="Presupuesto Revendedores")
 
+# --------- Solapa 3: Pedido -----------
 with tab3:
     df_cat = load_catalogue()
     if "pedido_items" not in st.session_state:
@@ -206,20 +209,13 @@ with tab3:
     celular = n2.text_input("Celular destinatario", key="np_celular")
     tipo_entrega = st.radio("Tipo de entrega", ["Envío", "Retiro"], horizontal=True, key="np_tipo_entrega_online")
 
-    if st.button("💾 Descargar Pedido (TXT)", key="save_pedido_btn"):
-        prefijo = date.today().strftime("%m%Y")
-        numero = 1 + st.session_state.get("num_pedido_tmp", 0)
-        pedido_id = f"{prefijo}-{numero:02d}"
-        st.session_state["num_pedido_tmp"] = numero
-
-        today_str = date.today().strftime("%d-%m-%Y")
-        txt_name = f"Pedido {today_str}.txt"
-
+    if st.button("📋 Generar texto para copiar", key="show_pedido_btn"):
+        # Armar el texto SIN PedidoID
         txt = ""
         if tipo_entrega == "Retiro":
-            txt += f"Retiro: ({pedido_id})\n\n"
+            txt += f"Retiro:\n\n"
         else:
-            txt += f"Envío: ({pedido_id})\n\n"
+            txt += f"Envío:\n\n"
 
         for itm in st.session_state["pedido_items"]:
             txt += f"{itm['cantidad']}× {itm['marca'].upper()} {itm['modelo'].upper()} {itm['color']}\n"
@@ -237,9 +233,10 @@ with tab3:
             txt += aclarac + "\n"
         txt += f"Recibe: {nombre} – {celular}\n"
 
-        st.download_button("📄 Descargar TXT del Pedido", data=txt, file_name=txt_name)
-        st.success(f"Pedido {pedido_id} generado (solo en TXT, no se guarda en Excel).")
-        st.session_state["pedido_items"] = []
+        # Mostrar en text_area para copiar y pegar
+        st.text_area("Copiar el texto generado:", value=txt, height=250)
+        st.success("Texto listo para copiar.")
+        # st.session_state["pedido_items"] = []
 
     if st.button("🧹 Limpiar Pedido", key="clear_pedido_btn"):
         st.session_state["pedido_items"] = []
