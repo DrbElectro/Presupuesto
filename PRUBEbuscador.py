@@ -5,7 +5,7 @@ from datetime import date
 
 EXCEL_PATH = "Proveedores.xlsx"
 
-# ========== Presupuesto ==========
+# ========== Presupuesto (Función única para ambos) ==========
 def solapa_presupuesto(precios_df, costos_df, clave_estado="presupuesto_items", titulo="Presupuesto"):
     st.subheader(titulo)
     precios_df.columns = precios_df.columns.str.strip()
@@ -109,11 +109,12 @@ def load_catalogue():
     df.columns = df.columns.str.strip()
     return df
 
-# ========== TABS ==========
+# ========== 3 SOLAPAS ==========
 st.title("Presupuestos y Pedidos")
 
-tab1, tab2 = st.tabs([
+tab1, tab2, tab3 = st.tabs([
     "Presupuesto",
+    "Presupuesto Revendedores",
     "Pedido"
 ])
 
@@ -121,14 +122,21 @@ with tab1:
     try:
         costos_df = pd.read_excel(EXCEL_PATH)
         precios10_df = pd.read_excel(EXCEL_PATH, sheet_name="10%")
-        precios5_df = pd.read_excel(EXCEL_PATH, sheet_name="5%")
     except Exception as e:
         st.error(f"No se pudo leer el archivo: {e}")
         st.stop()
     solapa_presupuesto(precios10_df, costos_df, clave_estado="presupuesto_items", titulo="Presupuesto")
-    solapa_presupuesto(precios5_df, costos_df, clave_estado="presupuesto_revend", titulo="Presupuesto Revendedores")
 
 with tab2:
+    try:
+        costos_df = pd.read_excel(EXCEL_PATH)
+        precios5_df = pd.read_excel(EXCEL_PATH, sheet_name="5%")
+    except Exception as e:
+        st.error(f"No se pudo leer el archivo: {e}")
+        st.stop()
+    solapa_presupuesto(precios5_df, costos_df, clave_estado="presupuesto_revend", titulo="Presupuesto Revendedores")
+
+with tab3:
     df_cat = load_catalogue()
     if "pedido_items" not in st.session_state:
         st.session_state["pedido_items"] = []
