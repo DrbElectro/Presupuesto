@@ -4,13 +4,25 @@ import re
 from datetime import date
 
 # ---- Autenticación básica ----
-# Define tu contraseña en .streamlit/secrets.toml:
+# Asegúrate de tener un archivo .streamlit/secrets.toml con:
 # [credentials]
-# password "Academia22"
+# password = "Academia22"
+# Puedes crear ese archivo en la raíz de tu proyecto.
+
+# Cargar contraseña de los secretos
+secret_section = st.secrets.get("credentials")
+if not secret_section or "password" not in secret_section:
+    st.error("🔑 Error: No se encontró la contraseña en los secretos.\n
+    Crea '.streamlit/secrets.toml' con:
+    [credentials]
+    password = \"Academia22\"")
+    st.stop()
+
 pwd = st.sidebar.text_input("🔒 Contraseña", type="password")
-if pwd != st.secrets["credentials"]["password"]:
+if pwd != secret_section["password"]:
     st.sidebar.error("⛔️ Contraseña incorrecta")
     st.stop()
+# ------------------------------
 
 # ========== CONFIGURACIÓN ==========
 EXCEL_PATH = "Proveedores.xlsx"
@@ -86,7 +98,6 @@ def solapa_presupuesto(precios_df, costos_df, clave_estado="presupuesto_items", 
     else:
         st.info("No hay costos disponibles para ese modelo.")
 
-    # Botón para agregar al presupuesto
     fila = resultado_precio.iloc[0]
     precio = str(fila[posibles_col_precios["Precio"]]).strip()
     colores = str(fila[posibles_col_precios["Colores"]]).strip()
@@ -118,14 +129,12 @@ def solapa_presupuesto(precios_df, costos_df, clave_estado="presupuesto_items", 
         if st.button(f"Limpiar {titulo}"):
             st.session_state[clave_estado] = []
 
-# ============ PEDIDO =============
 @st.cache_data
 def load_catalogue():
     df = pd.read_excel(EXCEL_PATH)
     df.columns = df.columns.str.strip()
     return df
 
-# ========== UI PRINCIPAL ===========
 st.title("DRB Electro")
 
 tab1, tab2, tab3 = st.tabs([
@@ -161,16 +170,16 @@ with tab3:
     c1, c2, c3, c4, c5, c6 = st.columns([2,2,2,1,2,1])
     manual = st.checkbox("Manual P/M/M", key="np_manual")
     if manual or df_cat.empty:
-        marca, modelo, proveedor, color = [""]*4
+        marca, modelo, proveedor, color = ["" for _ in range(4)]
         costo_usd = c6.number_input("Costo USD", 0.0, format="%.2f", key="item_costo_usd_manual")
         marca     = c1.text_input("Marca", key="item_marca_manual")
         modelo    = c2.text_input("Modelo", key="item_modelo_manual")
         proveedor = c3.text_input("Proveedor", key="item_proveedor_manual")
         color     = c5.text_input("Color", key="item_color_manual")
     else:
-        marcas_disponibles = sorted(df_cat["Marca"].dropna().unique())
-        if marcas_disponibles:
-            marca = c1.selectbox("Marca", marcas_disponibles, key="item_marca")
+        marcas_disp = sorted(df_cat["Marca"].dropna().unique())
+        if marcas_disp:
+            marca = c1.selectbox("Marca", marcas_disp, key="item_marca")
             modelos_disp = sorted(df_cat[df_cat["Marca"]==marca]["Modelo"].dropna().unique())
             if modelos_disp:
                 modelo = c2.selectbox("Modelo", modelos_disp, key="item_modelo")
@@ -198,9 +207,9 @@ with tab3:
 
     if st.button("➕ Agregar ítem", key="add_item_btn"):
         st.session_state["pedido_items"].append({
-            "proveedor": proveedor, "marca": marca,
-            "modelo": modelo,    "costo_usd": costo_usd,
-            "color": color,      "cantidad": cantidad
+            "proveedor":proveedor, "marca":marca,
+            "modelo":modelo,    "costo_usd":costo_usd,
+            "color":color,      "cantidad":cantidad
         })
         st.success(f"{cantidad}× {marca} {modelo} agregado.")
 
@@ -224,24 +233,20 @@ with tab3:
     tipo_entrega = st.radio("Tipo de entrega", ["Envío","Retiro"], horizontal=True, key="np_tipo_entrega_online")
 
     if st.button("📋 Generar texto para copiar", key="show_pedido_btn"):
-        txt = ""
-        if tipo_entrega == "Retiro":
-            txt += "Retiro:\n\n"
-        else:
-            txt += "Envío:\n\n"
+        txt = "Retiro:" if tipo_entrega=="Retiro" else "Envío:"
+        txt += "\n\n"
         for itm in st.session_state["pedido_items"]:
             txt += f"{itm['cantidad']}× {itm['marca'].upper()} {itm['modelo'].upper()} {itm['color']}\n"
-        if tipo_entrega != "Retiro":
+        if tipo_entrega!="Retiro":
             txt += f"\nDirección: {direccion}\nLocalidad: {localidad}\n"
         txt += f"Horario: {horario}\n\n"
-        pago_str = (f"$ {int(importe):,}".replace(",",".") if moneda == "ARS" else f"USD {int(importe)}")
-        if costo_envio > 0:
-            pago_str += (f" + Envío $ {int(costo_envio):,}".replace(",",".") if moneda == "ARS" else f" + Envío $ {int(costo_envio)}")
-        txt += f"PAGA: {pago_str}\n\n"
-        if aclarac:
-            txt += aclarac + "\n"
-        txt += f"Recibe: {nombre} – {celular}\n"
-        st.text_area("Copiar el texto generado:", value=txt, height=250)
+        pago_str = (f"$ {int(importe):,}".replace(",",".") if moneda=="ARS" else f"USD {int(importe)}")
+        if costo_envio>0:
+            pago_str += (f" + Envío $ {int(costo_envio):,}".replace(",",".") if moneda=="ARS" else f" + Envío $ {int(costo_envio)}")
+        txt+=f"PAGA: {pago_str}\n\n"
+        txt+=(aclarac+"\n") if aclarac else ""
+        txt+=f"Recibe: {nombre} – {celular}\n"
+        st.text_area("Copiar el texto generado:",value=txt,height=250)
         st.success("Texto listo para copiar.")
 
     if st.button("🧹 Limpiar Pedido", key="clear_pedido_btn"):
