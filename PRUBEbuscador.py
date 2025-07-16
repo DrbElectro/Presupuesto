@@ -3,42 +3,41 @@ import pandas as pd
 import re
 from datetime import date
 
-# ---- Autenticación básica con sesión ----
-# Asegúrate de tener .streamlit/secrets.toml:
+# ---- Autenticación básica ----
+# Asegúrate de tener .streamlit/secrets.toml con:
 # [credentials]
 # password = "MiClave123"
 
-# Comprobá si ya fue autenticado (uso de get para evitar KeyError)
+# Obtener estado de autenticación (evitar KeyError)
 authenticated = st.session_state.get('authenticated', False)
 
-# Cargá la contraseña de los secretos
+# Obtener contraseña del secrets
 password_secret = None
 if 'credentials' in st.secrets and 'password' in st.secrets['credentials']:
     password_secret = st.secrets['credentials']['password']
 else:
-    st.error('''🔑 Error: No se encontró la contraseña en los secretos.
-Por favor, crea '.streamlit/secrets.toml' con:
-[credentials]
-password = "Academia22"''')
+    st.error(
+        "🔑 Error: No se encontró la contraseña en los secretos.
+"
+        "Por favor, crea '.streamlit/secrets.toml' con:
+"
+        "[credentials]
+"
+        "password = \"TuClaveAqui\""
+    )
     st.stop()
 
-# Si no está autenticado, pedí contraseña
-def show_login():
-    pwd = st.text_input("🔒 Contraseña", type="password")
-    if pwd:
-        if pwd == password_secret:
-            st.session_state['authenticated'] = True
-            st.experimental_rerun()
-        else:
-            st.error("⛔️ Contraseña incorrecta")
-            st.stop()
-    else:
-        # Sin pwd ingresada, detenemos la ejecución
-        st.stop()
-
+# Flujo de login sin rerun
 if not authenticated:
-    show_login()
-# ------------------------------
+    pwd = st.text_input("🔒 Contraseña", type="password")
+    if not pwd:
+        st.stop()
+    if pwd != password_secret:
+        st.error("⛔️ Contraseña incorrecta")
+        st.stop()
+    # Si la contraseña es correcta, marcamos autenticado
+    st.session_state['authenticated'] = True
+    # Continuamos la ejecución
 # ------------------------------
 # ========== CONFIGURACIÓN ==========
 EXCEL_PATH = "Proveedores.xlsx"
