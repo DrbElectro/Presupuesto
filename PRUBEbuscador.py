@@ -23,7 +23,7 @@ else:
 "
         "[credentials]
 "
-        "password = \"TuClaveAqui\""
+        "password = \"Academia22\""
     )
     st.stop()
 
