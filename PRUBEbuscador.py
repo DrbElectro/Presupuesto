@@ -3,10 +3,20 @@ import pandas as pd
 import re
 from datetime import date
 
+# ---- Autenticación básica ----
+# Define tu contraseña en .streamlit/secrets.toml:
+# [credentials]
+# password = "MiClave123"
+pwd = st.sidebar.text_input("🔒 Contraseña", type="password")
+if pwd != st.secrets["credentials"]["password"]:
+    st.sidebar.error("⛔️ Contraseña incorrecta")
+    st.stop()
+
+# ========== CONFIGURACIÓN ==========
 EXCEL_PATH = "Proveedores.xlsx"
 
 # ---------- SOLAPA PRESUPUESTO -----------
-def solapa_presupuesto(precios_df, costos_df, clave_estado="presupuesto_items", titulo="Presupuesto"):
+def solapa_presupuesto(precios_df, costos_df, clave_estado="presupuesto_items", titulo="Presupuesto"):    
     st.subheader(titulo)
     precios_df.columns = precios_df.columns.str.strip()
     costos_df.columns = costos_df.columns.str.strip()
@@ -34,23 +44,34 @@ def solapa_presupuesto(precios_df, costos_df, clave_estado="presupuesto_items", 
     columnas_precios = list(precios_df.columns)
     posibles_col_precios = {
         "Proveedor": [c for c in columnas_precios if "proveedor" in c.lower()][0],
-        "Precio": [c for c in columnas_precios if "precio" in c.lower()][0],
-        "Colores": [c for c in columnas_precios if "color" in c.lower()][0],
-        "Ganancia": [c for c in columnas_precios if "ganancia" in c.lower()][0]
+        "Precio":    [c for c in columnas_precios if "precio"    in c.lower()][0],
+        "Colores":   [c for c in columnas_precios if "color"     in c.lower()][0],
+        "Ganancia":  [c for c in columnas_precios if "ganancia"  in c.lower()][0]
     }
-    resultado_precio = precios_df[(precios_df['Marca'] == marca_sel) & (precios_df['Modelo'] == modelo_sel)]
+    resultado_precio = precios_df[
+        (precios_df['Marca']  == marca_sel) &
+        (precios_df['Modelo'] == modelo_sel)
+    ]
 
     if resultado_precio.empty:
         st.warning("No se encontró información para ese modelo.")
         return
 
-    mostrar_precio = resultado_precio[[posibles_col_precios["Proveedor"], posibles_col_precios["Precio"], posibles_col_precios["Colores"], posibles_col_precios["Ganancia"]]]
+    mostrar_precio = resultado_precio[[
+        posibles_col_precios["Proveedor"],
+        posibles_col_precios["Precio"],
+        posibles_col_precios["Colores"],
+        posibles_col_precios["Ganancia"]
+    ]]
     st.write("Precios:")
     st.dataframe(mostrar_precio, use_container_width=True, hide_index=True)
 
     st.write("Costos:")
-    res_costos = costos_df[(costos_df['Marca'] == marca_sel) & (costos_df['Modelo'] == modelo_sel)]
-    proveedores = [col for col in costos_df.columns if col not in ['Marca', 'Modelo']]
+    res_costos = costos_df[
+        (costos_df['Marca']  == marca_sel) &
+        (costos_df['Modelo'] == modelo_sel)
+    ]
+    proveedores = [col for col in costos_df.columns if col not in ['Marca','Modelo']]
     if not res_costos.empty:
         fila_costos = res_costos.iloc[0]
         data_costos = []
@@ -59,22 +80,18 @@ def solapa_presupuesto(precios_df, costos_df, clave_estado="presupuesto_items", 
             if pd.notna(costo):
                 data_costos.append({"Proveedor": prov, "Costo": f"USD {int(costo)}"})
         if data_costos:
-            tabla_costos = pd.DataFrame(data_costos)
-            st.dataframe(tabla_costos, use_container_width=True, hide_index=True)
+            st.dataframe(pd.DataFrame(data_costos), use_container_width=True, hide_index=True)
         else:
             st.info("No hay costos disponibles para ese modelo.")
     else:
         st.info("No hay costos disponibles para ese modelo.")
 
-    # Botón para agregar al presupuesto (toma el primer precio encontrado)
+    # Botón para agregar al presupuesto
     fila = resultado_precio.iloc[0]
     precio = str(fila[posibles_col_precios["Precio"]]).strip()
     colores = str(fila[posibles_col_precios["Colores"]]).strip()
     proveedor_venta = str(fila[posibles_col_precios["Proveedor"]]).strip()
-    if precio.lower().startswith("usd"):
-        precio_val = precio
-    else:
-        precio_val = f"USD {precio}"
+    precio_val = precio if precio.lower().startswith("usd") else f"USD {precio}"
     st.markdown(f"**{marca_sel} {modelo_sel} {precio_val} (Colores: {colores})**")
     if st.button(f"Agregar al {titulo}"):
         st.session_state[clave_estado].append({
@@ -85,19 +102,18 @@ def solapa_presupuesto(precios_df, costos_df, clave_estado="presupuesto_items", 
             "Proveedor": proveedor_venta
         })
 
-    # Mostrar detalle del presupuesto
     if st.session_state[clave_estado]:
         st.markdown("---")
         st.markdown(f"### Detalle del {titulo}")
         total = 0
         for item in st.session_state[clave_estado]:
-            m = re.search(r"\d+", item["Precio"].replace(",", ""))
+            m = re.search(r"\d+", item["Precio"].replace(",",""))
             valor = int(m.group()) if m else 0
             total += valor
-            if item["Colores"]:
-                st.markdown(f"{item['Marca']} {item['Modelo']} {item['Precio']} (Colores: {item['Colores']})")
-            else:
-                st.markdown(f"{item['Marca']} {item['Modelo']} {item['Precio']}")
+            linea = f"{item['Marca']} {item['Modelo']} {item['Precio']}"
+            if item['Colores']:
+                linea += f" (Colores: {item['Colores']})"
+            st.markdown(linea)
         st.markdown(f"---\n### **TOTAL: USD {total}**")
         if st.button(f"Limpiar {titulo}"):
             st.session_state[clave_estado] = []
@@ -118,27 +134,24 @@ tab1, tab2, tab3 = st.tabs([
     "Pedido"
 ])
 
-# --------- Solapa 1: Presupuesto -----------
 with tab1:
     try:
-        costos_df = pd.read_excel(EXCEL_PATH)
+        costos_df    = pd.read_excel(EXCEL_PATH)
         precios10_df = pd.read_excel(EXCEL_PATH, sheet_name="10%")
     except Exception as e:
         st.error(f"No se pudo leer el archivo: {e}")
         st.stop()
     solapa_presupuesto(precios10_df, costos_df, clave_estado="presupuesto_items", titulo="Presupuesto")
 
-# --------- Solapa 2: Revendedores -----------
 with tab2:
     try:
-        costos_df = pd.read_excel(EXCEL_PATH)
+        costos_df   = pd.read_excel(EXCEL_PATH)
         precios5_df = pd.read_excel(EXCEL_PATH, sheet_name="5%")
     except Exception as e:
         st.error(f"No se pudo leer el archivo: {e}")
         st.stop()
     solapa_presupuesto(precios5_df, costos_df, clave_estado="presupuesto_revend", titulo="Presupuesto Revendedores")
 
-# --------- Solapa 3: Pedido -----------
 with tab3:
     df_cat = load_catalogue()
     if "pedido_items" not in st.session_state:
@@ -148,18 +161,19 @@ with tab3:
     c1, c2, c3, c4, c5, c6 = st.columns([2,2,2,1,2,1])
     manual = st.checkbox("Manual P/M/M", key="np_manual")
     if manual or df_cat.empty:
+        marca, modelo, proveedor, color = [""]*4
+        costo_usd = c6.number_input("Costo USD", 0.0, format="%.2f", key="item_costo_usd_manual")
         marca     = c1.text_input("Marca", key="item_marca_manual")
         modelo    = c2.text_input("Modelo", key="item_modelo_manual")
         proveedor = c3.text_input("Proveedor", key="item_proveedor_manual")
         color     = c5.text_input("Color", key="item_color_manual")
-        costo_usd = c6.number_input("Costo USD", 0.0, format="%.2f", key="item_costo_usd_manual")
     else:
         marcas_disponibles = sorted(df_cat["Marca"].dropna().unique())
         if marcas_disponibles:
             marca = c1.selectbox("Marca", marcas_disponibles, key="item_marca")
-            modelos_disponibles = sorted(df_cat[df_cat["Marca"]==marca]["Modelo"].dropna().unique())
-            if modelos_disponibles:
-                modelo = c2.selectbox("Modelo", modelos_disponibles, key="item_modelo")
+            modelos_disp = sorted(df_cat[df_cat["Marca"]==marca]["Modelo"].dropna().unique())
+            if modelos_disp:
+                modelo = c2.selectbox("Modelo", modelos_disp, key="item_modelo")
                 row = df_cat.query("Marca==@marca and Modelo==@modelo")
                 if not row.empty:
                     row = row.iloc[0]
@@ -185,8 +199,8 @@ with tab3:
     if st.button("➕ Agregar ítem", key="add_item_btn"):
         st.session_state["pedido_items"].append({
             "proveedor": proveedor, "marca": marca,
-            "modelo": modelo, "costo_usd": costo_usd,
-            "color": color, "cantidad": cantidad
+            "modelo": modelo,    "costo_usd": costo_usd,
+            "color": color,      "cantidad": cantidad
         })
         st.success(f"{cantidad}× {marca} {modelo} agregado.")
 
@@ -204,39 +218,31 @@ with tab3:
     moneda  = m1.selectbox("Moneda", ["USD","ARS"], key="np_moneda")
     importe = m2.number_input("Importe", 0.0, format="%.2f", key="np_importe")
     aclarac = st.text_input("Aclaración", key="np_aclaracion")
-    n1, n2   = st.columns(2)
+    n1, n2 = st.columns(2)
     nombre  = n1.text_input("Cliente", key="np_nombre")
     celular = n2.text_input("Celular destinatario", key="np_celular")
-    tipo_entrega = st.radio("Tipo de entrega", ["Envío", "Retiro"], horizontal=True, key="np_tipo_entrega_online")
+    tipo_entrega = st.radio("Tipo de entrega", ["Envío","Retiro"], horizontal=True, key="np_tipo_entrega_online")
 
     if st.button("📋 Generar texto para copiar", key="show_pedido_btn"):
-        # Armar el texto SIN PedidoID
         txt = ""
         if tipo_entrega == "Retiro":
-            txt += f"Retiro:\n\n"
+            txt += "Retiro:\n\n"
         else:
-            txt += f"Envío:\n\n"
-
+            txt += "Envío:\n\n"
         for itm in st.session_state["pedido_items"]:
             txt += f"{itm['cantidad']}× {itm['marca'].upper()} {itm['modelo'].upper()} {itm['color']}\n"
-
         if tipo_entrega != "Retiro":
             txt += f"\nDirección: {direccion}\nLocalidad: {localidad}\n"
         txt += f"Horario: {horario}\n\n"
-
-        pago_str = (f"$ {int(importe):,}".replace(",", ".") if moneda == "ARS" else f"USD {int(importe)}")
+        pago_str = (f"$ {int(importe):,}".replace(",",".") if moneda == "ARS" else f"USD {int(importe)}")
         if costo_envio > 0:
-            pago_str += (f" + Envío $ {int(costo_envio):,}".replace(",", ".") if moneda == "ARS"
-                         else f" + Envío $ {int(costo_envio)}")
+            pago_str += (f" + Envío $ {int(costo_envio):,}".replace(",",".") if moneda == "ARS" else f" + Envío $ {int(costo_envio)}")
         txt += f"PAGA: {pago_str}\n\n"
         if aclarac:
             txt += aclarac + "\n"
         txt += f"Recibe: {nombre} – {celular}\n"
-
-        # Mostrar en text_area para copiar y pegar
         st.text_area("Copiar el texto generado:", value=txt, height=250)
         st.success("Texto listo para copiar.")
-        # st.session_state["pedido_items"] = []
 
     if st.button("🧹 Limpiar Pedido", key="clear_pedido_btn"):
         st.session_state["pedido_items"] = []
