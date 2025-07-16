@@ -16,14 +16,16 @@ if not secret_section or "password" not in secret_section:
         "🔑 Error: No se encontró la contraseña en los secretos.\n"
         "Por favor, crea '.streamlit/secrets.toml' con:\n"
         "[credentials]\n"
-        "password = \"Academia22\""
+        "password = \"TuClaveAqui\""
     )
     st.stop()
 
-# Pedir contraseña
-pwd = st.sidebar.text_input("🔒 Contraseña", type="password")
+# Pedir contraseña en el cuerpo de la página (para mejor compatibilidad móvil)
+pwd = st.text_input("🔒 Contraseña", type="password")
+if not pwd:
+    st.stop()
 if pwd != secret_section["password"]:
-    st.sidebar.error("⛔️ Contraseña incorrecta")
+    st.error("⛔️ Contraseña incorrecta")
     st.stop()
 # ------------------------------
 
