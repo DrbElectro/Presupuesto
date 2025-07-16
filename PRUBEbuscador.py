@@ -3,25 +3,32 @@ import pandas as pd
 import re
 from datetime import date
 
-# ---- Autenticación básica ----
-# Asegúrate de tener un archivo .streamlit/secrets.toml con:
+# ---- Autenticación básica con sesión ----
+# Asegúrate de tener .streamlit/secrets.toml:
 # [credentials]
 # password = "MiClave123"
-# Puedes crear ese archivo en la raíz de tu proyecto.
 
-# Cargar la contraseña desde secretos
-secret_section = st.secrets.get("credentials")
-password_secret = secret_section.get("password") if secret_section else None
-if password_secret is None:
+# Comprobá si ya fue autenticado (uso de get para evitar KeyError)
+authenticated = st.session_state.get('authenticated', False)
+
+# Cargá la contraseña de los secretos
+password_secret = None
+if 'credentials' in st.secrets and 'password' in st.secrets['credentials']:
+    password_secret = st.secrets['credentials']['password']
+else:
     st.error(
-        "🔑 Error: No se encontró la contraseña en los secretos.\n"
-        "Por favor, crea '.streamlit/secrets.toml' con:\n"
-        "[credentials]\npassword = \"TuClaveAqui\""
+        "🔑 Error: No se encontró la contraseña en los secretos.
+"
+        "Por favor, crea '.streamlit/secrets.toml' con:
+"
+        "[credentials]
+"
+        "password = \"Academia22\""
     )
     st.stop()
 
-# Si no está autenticado, pedir contraseña
-if not st.session_state['authenticated']:
+# Si no está autenticado, pedí contraseña
+def show_login():
     pwd = st.text_input("🔒 Contraseña", type="password")
     if pwd:
         if pwd == password_secret:
@@ -29,8 +36,14 @@ if not st.session_state['authenticated']:
             st.experimental_rerun()
         else:
             st.error("⛔️ Contraseña incorrecta")
-    st.stop()
+            st.stop()
+    else:
+        # Sin pwd ingresada, detenemos la ejecución
+        st.stop()
 
+if not authenticated:
+    show_login()
+# ------------------------------
 # ========== CONFIGURACIÓN ==========
 EXCEL_PATH = "Proveedores.xlsx"
 
