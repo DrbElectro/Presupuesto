@@ -9,6 +9,10 @@ from datetime import date
 # password = "MiClave123"
 
 # Obtener estado de autenticación (evitar KeyError)
+import streamlit as st  # para st.session_state
+from streamlit.runtime.scriptrunner import RerunException, RerunData
+
+# Estado de autenticación (evitar KeyError)
 authenticated = st.session_state.get('authenticated', False)
 
 # Obtener contraseña del secrets
@@ -22,7 +26,7 @@ Por favor, crea '.streamlit/secrets.toml' con:
 password = "Academia22"''')
     st.stop()
 
-# Flujo de login sin rerun
+# Flujo de login con rerun forzado para ocultar input
 if not authenticated:
     pwd = st.text_input("🔒 Contraseña", type="password")
     if not pwd:
@@ -30,10 +34,10 @@ if not authenticated:
     if pwd != password_secret:
         st.error("⛔️ Contraseña incorrecta")
         st.stop()
-    # Si la contraseña es correcta, marcamos autenticado
+    # Autenticación correcta
     st.session_state['authenticated'] = True
-    # Continuamos la ejecución
-# ------------------------------
+    # Forzar recarga para actualizar 'authenticated'
+    raise RerunException(RerunData())
 # ========== CONFIGURACIÓN ==========
 EXCEL_PATH = "Proveedores.xlsx"
 
