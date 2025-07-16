@@ -6,7 +6,7 @@ from datetime import date
 # ---- Autenticación básica ----
 # Define tu contraseña en .streamlit/secrets.toml:
 # [credentials]
-# password 
+# password "Academia22"
 pwd = st.sidebar.text_input("🔒 Contraseña", type="password")
 if pwd != st.secrets["credentials"]["password"]:
     st.sidebar.error("⛔️ Contraseña incorrecta")
