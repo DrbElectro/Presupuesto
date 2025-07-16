@@ -6,18 +6,21 @@ from datetime import date
 # ---- Autenticación básica ----
 # Asegúrate de tener un archivo .streamlit/secrets.toml con:
 # [credentials]
-# password = "Academia22"
+# password = "MiClave123"
 # Puedes crear ese archivo en la raíz de tu proyecto.
 
-# Cargar contraseña de los secretos
+# Cargar la sección de secretos
 secret_section = st.secrets.get("credentials")
 if not secret_section or "password" not in secret_section:
-    st.error("🔑 Error: No se encontró la contraseña en los secretos.\n
-    Crea '.streamlit/secrets.toml' con:
-    [credentials]
-    password = \"Academia22\"")
+    st.error(
+        "🔑 Error: No se encontró la contraseña en los secretos.\n"
+        "Por favor, crea '.streamlit/secrets.toml' con:\n"
+        "[credentials]\n"
+        "password = \"Academia22\""
+    )
     st.stop()
 
+# Pedir contraseña
 pwd = st.sidebar.text_input("🔒 Contraseña", type="password")
 if pwd != secret_section["password"]:
     st.sidebar.error("⛔️ Contraseña incorrecta")
@@ -28,7 +31,7 @@ if pwd != secret_section["password"]:
 EXCEL_PATH = "Proveedores.xlsx"
 
 # ---------- SOLAPA PRESUPUESTO -----------
-def solapa_presupuesto(precios_df, costos_df, clave_estado="presupuesto_items", titulo="Presupuesto"):    
+def solapa_presupuesto(precios_df, costos_df, clave_estado="presupuesto_items", titulo="Presupuesto"):
     st.subheader(titulo)
     precios_df.columns = precios_df.columns.str.strip()
     costos_df.columns = costos_df.columns.str.strip()
@@ -69,186 +72,146 @@ def solapa_presupuesto(precios_df, costos_df, clave_estado="presupuesto_items", 
         st.warning("No se encontró información para ese modelo.")
         return
 
-    mostrar_precio = resultado_precio[[
+    mostrar = resultado_precio[[
         posibles_col_precios["Proveedor"],
         posibles_col_precios["Precio"],
         posibles_col_precios["Colores"],
         posibles_col_precios["Ganancia"]
     ]]
-    st.write("Precios:")
-    st.dataframe(mostrar_precio, use_container_width=True, hide_index=True)
+    st.dataframe(mostrar, use_container_width=True, hide_index=True)
 
     st.write("Costos:")
-    res_costos = costos_df[
-        (costos_df['Marca']  == marca_sel) &
-        (costos_df['Modelo'] == modelo_sel)
-    ]
-    proveedores = [col for col in costos_df.columns if col not in ['Marca','Modelo']]
-    if not res_costos.empty:
-        fila_costos = res_costos.iloc[0]
-        data_costos = []
-        for prov in proveedores:
-            costo = fila_costos[prov]
-            if pd.notna(costo):
-                data_costos.append({"Proveedor": prov, "Costo": f"USD {int(costo)}"})
-        if data_costos:
-            st.dataframe(pd.DataFrame(data_costos), use_container_width=True, hide_index=True)
-        else:
-            st.info("No hay costos disponibles para ese modelo.")
+    res_costos = costos_df[(costos_df['Marca']==marca_sel)&(costos_df['Modelo']==modelo_sel)]
+    proveedores = [c for c in costos_df.columns if c not in ['Marca','Modelo']]
+    data_costos = []
+    for prov in proveedores:
+        c = res_costos.get(prov)
+        if c is not None and pd.notna(c.iloc[0]):
+            data_costos.append({"Proveedor":prov, "Costo":f"USD {int(c.iloc[0])}"})
+    if data_costos:
+        st.dataframe(pd.DataFrame(data_costos), use_container_width=True, hide_index=True)
     else:
         st.info("No hay costos disponibles para ese modelo.")
 
     fila = resultado_precio.iloc[0]
     precio = str(fila[posibles_col_precios["Precio"]]).strip()
-    colores = str(fila[posibles_col_precios["Colores"]]).strip()
-    proveedor_venta = str(fila[posibles_col_precios["Proveedor"]]).strip()
+    colores= str(fila[posibles_col_precios["Colores"]]).strip()
+    pv    = str(fila[posibles_col_precios["Proveedor"]]).strip()
     precio_val = precio if precio.lower().startswith("usd") else f"USD {precio}"
     st.markdown(f"**{marca_sel} {modelo_sel} {precio_val} (Colores: {colores})**")
     if st.button(f"Agregar al {titulo}"):
         st.session_state[clave_estado].append({
-            "Marca": marca_sel,
-            "Modelo": modelo_sel,
-            "Precio": precio_val,
-            "Colores": colores,
-            "Proveedor": proveedor_venta
+            "Marca":marca_sel,"Modelo":modelo_sel,
+            "Precio":precio_val,"Colores":colores,
+            "Proveedor":pv
         })
 
     if st.session_state[clave_estado]:
         st.markdown("---")
-        st.markdown(f"### Detalle del {titulo}")
-        total = 0
-        for item in st.session_state[clave_estado]:
-            m = re.search(r"\d+", item["Precio"].replace(",",""))
-            valor = int(m.group()) if m else 0
-            total += valor
-            linea = f"{item['Marca']} {item['Modelo']} {item['Precio']}"
-            if item['Colores']:
-                linea += f" (Colores: {item['Colores']})"
-            st.markdown(linea)
+        total=0
+        for itm in st.session_state[clave_estado]:
+            m=re.search(r"\d+",itm["Precio"].replace(",",""))
+            val=int(m.group()) if m else 0
+            total+=val
+            txt=f"{itm['Marca']} {itm['Modelo']} {itm['Precio']}"
+            if itm['Colores']: txt+=f" (Colores: {itm['Colores']})"
+            st.markdown(txt)
         st.markdown(f"---\n### **TOTAL: USD {total}**")
         if st.button(f"Limpiar {titulo}"):
-            st.session_state[clave_estado] = []
+            st.session_state[clave_estado]=[]
 
 @st.cache_data
 def load_catalogue():
-    df = pd.read_excel(EXCEL_PATH)
-    df.columns = df.columns.str.strip()
+    df=pd.read_excel(EXCEL_PATH)
+    df.columns=df.columns.str.strip()
     return df
 
 st.title("DRB Electro")
-
-tab1, tab2, tab3 = st.tabs([
-    "Presupuesto",
-    "Presupuesto Revendedores",
-    "Pedido"
-])
+tab1,tab2,tab3=st.tabs(["Presupuesto","Presupuesto Revendedores","Pedido"])
 
 with tab1:
     try:
-        costos_df    = pd.read_excel(EXCEL_PATH)
-        precios10_df = pd.read_excel(EXCEL_PATH, sheet_name="10%")
+        costos=pd.read_excel(EXCEL_PATH)
+        pre10=pd.read_excel(EXCEL_PATH,sheet_name="10%")
     except Exception as e:
         st.error(f"No se pudo leer el archivo: {e}")
         st.stop()
-    solapa_presupuesto(precios10_df, costos_df, clave_estado="presupuesto_items", titulo="Presupuesto")
+    solapa_presupuesto(pre10,costos,clave_estado="presupuesto_items",titulo="Presupuesto")
 
 with tab2:
     try:
-        costos_df   = pd.read_excel(EXCEL_PATH)
-        precios5_df = pd.read_excel(EXCEL_PATH, sheet_name="5%")
+        costos=pd.read_excel(EXCEL_PATH)
+        pre5 =pd.read_excel(EXCEL_PATH,sheet_name="5%")
     except Exception as e:
         st.error(f"No se pudo leer el archivo: {e}")
         st.stop()
-    solapa_presupuesto(precios5_df, costos_df, clave_estado="presupuesto_revend", titulo="Presupuesto Revendedores")
+    solapa_presupuesto(pre5,costos,clave_estado="presupuesto_revend",titulo="Presupuesto Revendedores")
 
 with tab3:
-    df_cat = load_catalogue()
-    if "pedido_items" not in st.session_state:
-        st.session_state["pedido_items"] = []
-
+    df_cat=load_catalogue()
+    if "pedido_items" not in st.session_state: st.session_state["pedido_items"]=[]
     st.markdown("#### Agregar ítem al pedido")
-    c1, c2, c3, c4, c5, c6 = st.columns([2,2,2,1,2,1])
-    manual = st.checkbox("Manual P/M/M", key="np_manual")
+    c1,c2,c3,c4,c5,c6=st.columns([2,2,2,1,2,1])
+    manual=st.checkbox("Manual P/M/M",key="np_manual")
     if manual or df_cat.empty:
-        marca, modelo, proveedor, color = ["" for _ in range(4)]
-        costo_usd = c6.number_input("Costo USD", 0.0, format="%.2f", key="item_costo_usd_manual")
-        marca     = c1.text_input("Marca", key="item_marca_manual")
-        modelo    = c2.text_input("Modelo", key="item_modelo_manual")
-        proveedor = c3.text_input("Proveedor", key="item_proveedor_manual")
-        color     = c5.text_input("Color", key="item_color_manual")
+        marca,modelo,prov,color="","","",""
+        costo_usd=c6.number_input("Costo USD",0.0,format="%.2f",key="item_costo_usd_manual")
+        marca =c1.text_input("Marca",key="item_marca_manual")
+        modelo=c2.text_input("Modelo",key="item_modelo_manual")
+        prov   =c3.text_input("Proveedor",key="item_proveedor_manual")
+        color =c5.text_input("Color",key="item_color_manual")
     else:
-        marcas_disp = sorted(df_cat["Marca"].dropna().unique())
-        if marcas_disp:
-            marca = c1.selectbox("Marca", marcas_disp, key="item_marca")
-            modelos_disp = sorted(df_cat[df_cat["Marca"]==marca]["Modelo"].dropna().unique())
-            if modelos_disp:
-                modelo = c2.selectbox("Modelo", modelos_disp, key="item_modelo")
-                row = df_cat.query("Marca==@marca and Modelo==@modelo")
-                if not row.empty:
-                    row = row.iloc[0]
-                    provs = [p for p in ("Ale","Eze","Di") if pd.notna(row.get(p))]
-                    proveedor = c3.selectbox("Proveedor", provs, key="item_proveedor")
-                    color = c5.text_input("Color", key="item_color")
-                    costo_usd = c6.number_input("Costo USD", float(row[proveedor]), format="%.2f", key="item_costo_usd")
-                else:
-                    c3.write("No hay datos para ese modelo.")
-                    proveedor = color = ""
-                    costo_usd = 0.0
+        marcas=sorted(df_cat["Marca"].dropna().unique())
+        if marcas:
+            marca=c1.selectbox("Marca",marcas,key="item_marca")
+            mods=sorted(df_cat[df_cat["Marca"]==marca]["Modelo"].dropna().unique())
+            if mods:
+                modelo=c2.selectbox("Modelo",mods,key="item_modelo")
+                row=df_cat.query("Marca==@marca and Modelo==@modelo").iloc[0]
+                provs=[p for p in ("Ale","Eze","Di") if pd.notna(row.get(p))]
+                prov=c3.selectbox("Proveedor",provs,key="item_proveedor")
+                color=c5.text_input("Color",key="item_color")
+                costo_usd=c6.number_input("Costo USD",float(row[prov]),format="%.2f",key="item_costo_usd")
             else:
                 c2.write("No hay modelos para esa marca.")
-                modelo = proveedor = color = ""
-                costo_usd = 0.0
+                modelo,prov,color="","",""
+                costo_usd=0.0
         else:
             c1.write("No hay marcas disponibles.")
-            marca = modelo = proveedor = color = ""
-            costo_usd = 0.0
-
-    cantidad = c4.number_input("Cantidad", min_value=1, value=1, key="item_cantidad")
-
-    if st.button("➕ Agregar ítem", key="add_item_btn"):
-        st.session_state["pedido_items"].append({
-            "proveedor":proveedor, "marca":marca,
-            "modelo":modelo,    "costo_usd":costo_usd,
-            "color":color,      "cantidad":cantidad
-        })
+            marca,modelo,prov,color="","","",""
+            costo_usd=0.0
+    cantidad=c4.number_input("Cantidad",min_value=1,value=1,key="item_cantidad")
+    if st.button("➕ Agregar ítem",key="add_item_btn"):
+        st.session_state["pedido_items"].append({"proveedor":prov,"marca":marca,"modelo":modelo,"costo_usd":costo_usd,"color":color,"cantidad":cantidad})
         st.success(f"{cantidad}× {marca} {modelo} agregado.")
-
     if st.session_state["pedido_items"]:
         st.markdown("**Ítems en este pedido:**")
-        for i, itm in enumerate(st.session_state["pedido_items"], 1):
+        for i,itm in enumerate(st.session_state["pedido_items"],1):
             st.write(f"{i}. {itm['cantidad']}× {itm['marca']} {itm['modelo']} — Color {itm['color']} — USD {itm['costo_usd']:.2f}")
-
-    d1, d2, d3, d4 = st.columns(4)
-    direccion   = d1.text_input("Dirección", key="np_direccion")
-    localidad   = d2.text_input("Localidad", key="np_localidad")
-    horario     = d3.text_input("Horario", key="np_horario")
-    costo_envio = d4.number_input("Costo de envío", 0.0, format="%.2f", key="np_costo_envio")
-    m1, m2 = st.columns([2,1])
-    moneda  = m1.selectbox("Moneda", ["USD","ARS"], key="np_moneda")
-    importe = m2.number_input("Importe", 0.0, format="%.2f", key="np_importe")
-    aclarac = st.text_input("Aclaración", key="np_aclaracion")
-    n1, n2 = st.columns(2)
-    nombre  = n1.text_input("Cliente", key="np_nombre")
-    celular = n2.text_input("Celular destinatario", key="np_celular")
-    tipo_entrega = st.radio("Tipo de entrega", ["Envío","Retiro"], horizontal=True, key="np_tipo_entrega_online")
-
-    if st.button("📋 Generar texto para copiar", key="show_pedido_btn"):
-        txt = "Retiro:" if tipo_entrega=="Retiro" else "Envío:"
-        txt += "\n\n"
+    d1,d2,d3,d4=st.columns(4)
+    direccion=d1.text_input("Dirección",key="np_direccion")
+    localidad=d2.text_input("Localidad",key="np_localidad")
+    horario=d3.text_input("Horario",key="np_horario")
+    c_envio=d4.number_input("Costo de envío",0.0,format="%.2f",key="np_costo_envio")
+    m1,m2=st.columns([2,1])
+    moneda=m1.selectbox("Moneda",["USD","ARS"],key="np_moneda")
+    importe=m2.number_input("Importe",0.0,format="%.2f",key="np_importe")
+    aclarac=st.text_input("Aclaración",key="np_aclaracion")
+    n1,n2=st.columns(2)
+    nombre=n1.text_input("Cliente",key="np_nombre")
+    celular=n2.text_input("Celular destinatario",key="np_celular")
+    tipo_entrega=st.radio("Tipo de entrega",["Envío","Retiro"],horizontal=True,key="np_tipo_entrega_online")
+    if st.button("📋 Generar texto para copiar",key="show_pedido_btn"):
+        txt = ("Retiro:\n\n" if tipo_entrega=="Retiro" else "Envío:\n\n")
         for itm in st.session_state["pedido_items"]:
-            txt += f"{itm['cantidad']}× {itm['marca'].upper()} {itm['modelo'].upper()} {itm['color']}\n"
-        if tipo_entrega!="Retiro":
-            txt += f"\nDirección: {direccion}\nLocalidad: {localidad}\n"
-        txt += f"Horario: {horario}\n\n"
-        pago_str = (f"$ {int(importe):,}".replace(",",".") if moneda=="ARS" else f"USD {int(importe)}")
-        if costo_envio>0:
-            pago_str += (f" + Envío $ {int(costo_envio):,}".replace(",",".") if moneda=="ARS" else f" + Envío $ {int(costo_envio)}")
-        txt+=f"PAGA: {pago_str}\n\n"
-        txt+=(aclarac+"\n") if aclarac else ""
-        txt+=f"Recibe: {nombre} – {celular}\n"
+            txt+=f"{itm['cantidad']}× {itm['marca'].upper()} {itm['modelo'].upper()} {itm['color']}\n"
+        if tipo_entrega!="Retiro": txt+=f"\nDirección: {direccion}\nLocalidad: {localidad}\n"
+        txt+=f"Horario: {horario}\n\n"
+        pago_str=(f"$ {int(importe):,}".replace(",",".") if moneda=="ARS" else f"USD {int(importe)}")
+        if c_envio>0: pago_str+=(f" + Envío $ {int(c_envio):,}".replace(",",".") if moneda=="ARS" else f" + Envío $ {int(c_envio)}")
+        txt+=f"PAGA: {pago_str}\n\n"+(aclarac+"\n" if aclarac else "")+f"Recibe: {nombre} – {celular}\n"
         st.text_area("Copiar el texto generado:",value=txt,height=250)
         st.success("Texto listo para copiar.")
-
-    if st.button("🧹 Limpiar Pedido", key="clear_pedido_btn"):
-        st.session_state["pedido_items"] = []
+    if st.button("🧹 Limpiar Pedido",key="clear_pedido_btn"):
+        st.session_state["pedido_items"]=[]
         st.success("Pedido limpiado.")
