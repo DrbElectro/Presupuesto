@@ -9,25 +9,27 @@ from datetime import date
 # password = "MiClave123"
 # Puedes crear ese archivo en la raíz de tu proyecto.
 
-# Cargar la sección de secretos
+# Cargar la contraseña desde secretos
 secret_section = st.secrets.get("credentials")
-if not secret_section or "password" not in secret_section:
+password_secret = secret_section.get("password") if secret_section else None
+if password_secret is None:
     st.error(
         "🔑 Error: No se encontró la contraseña en los secretos.\n"
         "Por favor, crea '.streamlit/secrets.toml' con:\n"
-        "[credentials]\n"
-        "password = \"TuClaveAqui\""
+        "[credentials]\npassword = \"TuClaveAqui\""
     )
     st.stop()
 
-# Pedir contraseña en el cuerpo de la página (para mejor compatibilidad móvil)
-pwd = st.text_input("🔒 Contraseña", type="password")
-if not pwd:
+# Si no está autenticado, pedir contraseña
+if not st.session_state['authenticated']:
+    pwd = st.text_input("🔒 Contraseña", type="password")
+    if pwd:
+        if pwd == password_secret:
+            st.session_state['authenticated'] = True
+            st.experimental_rerun()
+        else:
+            st.error("⛔️ Contraseña incorrecta")
     st.stop()
-if pwd != secret_section["password"]:
-    st.error("⛔️ Contraseña incorrecta")
-    st.stop()
-# ------------------------------
 
 # ========== CONFIGURACIÓN ==========
 EXCEL_PATH = "Proveedores.xlsx"
