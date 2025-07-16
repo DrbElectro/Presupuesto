@@ -16,8 +16,10 @@ password_secret = None
 if 'credentials' in st.secrets and 'password' in st.secrets['credentials']:
     password_secret = st.secrets['credentials']['password']
 else:
-    st.error(
-        "🔑 Error: No se encontró la contraseña en los secretos.
+    st.error(    '''🔑 Error: No se encontró la contraseña en los secretos.
+Por favor, crea '.streamlit/secrets.toml' con:
+[credentials]
+password = "Academia22"'''
 "
         "Por favor, crea '.streamlit/secrets.toml' con:
 "
@@ -43,6 +45,7 @@ def show_login():
 
 if not authenticated:
     show_login()
+# ------------------------------
 # ------------------------------
 # ========== CONFIGURACIÓN ==========
 EXCEL_PATH = "Proveedores.xlsx"
