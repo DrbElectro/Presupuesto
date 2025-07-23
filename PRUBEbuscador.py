@@ -1,3 +1,4 @@
+#!/usr/bin/env python3
 import os
 import re
 from datetime import date
@@ -8,28 +9,31 @@ from streamlit.runtime.scriptrunner import RerunException, RerunData
 
 # ===================== AUTENTICACIÓN =====================
 def get_password():
-    # 1) Secrets.toml
+    """Devuelve la contraseña desde secrets o variable de entorno."""
+    # 1) Secrets.toml (local) o panel de Secrets en Streamlit Cloud
     try:
         return st.secrets["credentials"]["password"]
     except Exception:
         pass
-    # 2) Var de entorno opcional
-    if os.getenv("APP_PASSWORD"):
-        return os.getenv("APP_PASSWORD")
-    # 3) Fallback (evítalo en producción)
+    # 2) Variable de entorno opcional
+    pw = os.getenv("APP_PASSWORD")
+    if pw:
+        return pw
+    # 3) Sin fallback hardcodeado en prod
     return None
 
-# Estado
+# Inicializar flag de sesión
 if "authenticated" not in st.session_state:
     st.session_state["authenticated"] = False
 
-REAL_PASSWORD = get_password()   # <<< ESTA LÍNEA FALTABA
+REAL_PASSWORD = get_password()
 
 if not REAL_PASSWORD:
     st.error(
         "🔑 Error: No se encontró la contraseña.\n\n"
         "Crea `.streamlit/secrets.toml` con:\n"
-        "[credentials]\npassword = \"Academia22\""
+        "[credentials]\npassword = \"Academia22\"\n"
+        "o cargá los secrets en Streamlit Cloud (Manage app → Settings → Secrets)."
     )
     st.stop()
 
@@ -41,7 +45,7 @@ if not st.session_state["authenticated"]:
         st.error("⛔️ Contraseña incorrecta")
         st.stop()
     st.session_state["authenticated"] = True
-    # rerun para esconder el input
+    # Rerun para ocultar el input de contraseña
     raise RerunException(RerunData())
 
 # ===================== CONFIG =====================
@@ -57,7 +61,11 @@ def solapa_presupuesto(precios_df, costos_df, clave_estado="presupuesto_items", 
         st.session_state[clave_estado] = []
 
     # Buscador
-    busqueda = st.text_input("Buscar modelo, parte del modelo o marca", key=titulo + "buscador").strip().upper()
+    busqueda = st.text_input(
+        "Buscar modelo, parte del modelo o marca",
+        key=titulo + "buscador"
+    ).strip().upper()
+
     precios_filtrados = precios_df.copy()
     if busqueda:
         precios_filtrados = precios_filtrados[
@@ -116,6 +124,7 @@ def solapa_presupuesto(precios_df, costos_df, clave_estado="presupuesto_items", 
     colores = str(fila[posibles_col_precios["Colores"]]).strip()
     pv = str(fila[posibles_col_precios["Proveedor"]]).strip()
     precio_val = precio if precio.lower().startswith("usd") else f"USD {precio}"
+
     st.markdown(f"**{marca_sel} {modelo_sel} {precio_val} (Colores: {colores})**")
     if st.button(f"Agregar al {titulo}"):
         st.session_state[clave_estado].append({
@@ -253,3 +262,8 @@ with tab3:
     if st.button("🧹 Limpiar Pedido", key="clear_pedido_btn"):
         st.session_state["pedido_items"] = []
         st.success("Pedido limpiado.")
+
+# ------------------- DEBUG OPCIONAL -------------------
+# (Comenta o borra esto en producción)
+# st.write("CWD:", os.getcwd())
+# st.write("Secrets:", dict(st.secrets))
