@@ -19,8 +19,11 @@ def get_password():
     # 3) Fallback (evítalo en producción)
     return None
 
+# Estado
 if "authenticated" not in st.session_state:
     st.session_state["authenticated"] = False
+
+REAL_PASSWORD = get_password()   # <<< ESTA LÍNEA FALTABA
 
 if not REAL_PASSWORD:
     st.error(
