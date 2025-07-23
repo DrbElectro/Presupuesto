@@ -22,15 +22,6 @@ def get_password():
 if "authenticated" not in st.session_state:
     st.session_state["authenticated"] = False
 
-REAL_PASSWORD = get_password()
-if not REAL_PASSWORD:
-    st.error(
-        "🔑 Error: No se encontró la contraseña.\n\n"
-        "Crea `.streamlit/secrets.toml` con:\n"
-        "[credentials]\npassword = \"Academia22\""
-    )
-    st.stop()
-
 if not st.session_state["authenticated"]:
     pwd = st.text_input("🔒 Contraseña", type="password")
     if not pwd:
