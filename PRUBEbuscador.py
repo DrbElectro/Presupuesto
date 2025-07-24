@@ -1,11 +1,14 @@
+#!/usr/bin/env python3
+import os
 import re
 from datetime import date
 
 import pandas as pd
 import streamlit as st
+from streamlit.runtime.scriptrunner import RerunException, RerunData
 
 # ===================== AUTENTICACIÓN HARDCODEADA =====================
-PASSWORD = "1224"   # ← Tu clave está aquí
+PASSWORD = "Academia22"   # ← Tu clave aquí
 
 if "authenticated" not in st.session_state:
     st.session_state["authenticated"] = False
@@ -17,11 +20,12 @@ if not st.session_state["authenticated"]:
     if pwd != PASSWORD:
         st.error("⛔️ Contraseña incorrecta")
         st.stop()
+    # Autenticación exitosa:
     st.session_state["authenticated"] = True
-    # Rerun para ocultar el input de contraseña
-    st.experimental_rerun()
+    # Forzar recarga para ocultar el input
+    raise RerunException(RerunData())
 
-# ===================== CONFIG =====================
+# ===================== CONFIGURACIÓN =====================
 EXCEL_PATH = "Proveedores.xlsx"
 
 # ===================== FUNCIONES =====================
@@ -33,6 +37,7 @@ def solapa_presupuesto(precios_df, costos_df, clave_estado="presupuesto_items", 
     if clave_estado not in st.session_state:
         st.session_state[clave_estado] = []
 
+    # Buscador
     busqueda = st.text_input("Buscar modelo, marca o parte del modelo", key=titulo+"buscador").strip().upper()
     precios_filtrados = precios_df.copy()
     if busqueda:
@@ -111,7 +116,7 @@ def load_catalogue():
     df.columns = df.columns.str.strip()
     return df
 
-# ===================== UI =====================
+# ===================== INTERFAZ =====================
 st.title("DRB Electro")
 tab1, tab2, tab3 = st.tabs(["Presupuesto","Revendedores","Pedido"])
 
@@ -152,8 +157,8 @@ with tab3:
     else:
         marcas = sorted(df_cat["Marca"].dropna().unique())
         if marcas:
-            marca  = c1.selectbox("Marca", marcas, key="item_marca")
-            mods   = sorted(df_cat[df_cat["Marca"]==marca]["Modelo"].dropna().unique())
+            marca   = c1.selectbox("Marca", marcas, key="item_marca")
+            mods    = sorted(df_cat[df_cat["Marca"]==marca]["Modelo"].dropna().unique())
             if mods:
                 modelo = c2.selectbox("Modelo", mods, key="item_modelo")
                 row    = df_cat.query("Marca==@marca and Modelo==@modelo").iloc[0]
@@ -212,7 +217,7 @@ with tab3:
         pago_str = (f"$ {int(importe):,}".replace(",",".") if moneda=="ARS" else f"USD {int(importe)}")
         if envio>0:
             pago_str += (f" + Envío $ {int(envio):,}".replace(",",".") if moneda=="ARS" else f" + Envío $ {int(envio)}")
-        txt += f"PAGA: {pago_str}\n\n" + (aclarac+"\n" if aclarac else "") + f"Recibe: {nombre} – {celular}\n"
+        txt += f"PAGA: {pago_str}\n\n"+(aclarac+"\n" if aclarac else "")+f"Recibe: {nombre} – {celular}\n"
         st.text_area("Copiar el texto generado:",value=txt,height=250)
         st.success("Texto listo para copiar.")
 
