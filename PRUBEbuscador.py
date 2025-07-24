@@ -8,7 +8,7 @@ import streamlit as st
 from streamlit.runtime.scriptrunner import RerunException, RerunData
 
 # ===================== AUTENTICACIÓN HARDCODEADA =====================
-PASSWORD = "Academia22"   # ← Tu clave aquí
+PASSWORD = "1224"   # ← Tu clave aquí
 
 if "authenticated" not in st.session_state:
     st.session_state["authenticated"] = False
