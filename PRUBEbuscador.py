@@ -1,4 +1,6 @@
 #!/usr/bin/env python3
+# -*- coding: utf-8 -*-
+
 import os
 import re
 from datetime import date
@@ -6,6 +8,7 @@ from datetime import date
 import pandas as pd
 import streamlit as st
 from streamlit.runtime.scriptrunner import RerunException, RerunData
+from streamlit.components.v1 import html as st_html
 
 import config
 import utils
@@ -24,6 +27,49 @@ if not st.session_state["authenticated"]:
         st.stop()
     st.session_state["authenticated"] = True
     raise RerunException(RerunData())
+
+# ===================== HELPERS COMUNES =====================
+def copy_to_clipboard_button(text: str, label="📋 Copiar resultado"):
+    """Botón de copiado al portapapeles (sin librerías extra)."""
+    import json, uuid
+    uid = "btn_" + uuid.uuid4().hex
+    payload = json.dumps(text)
+    st_html(
+        f"""
+        <div style="display:flex;gap:.5rem;align-items:center;">
+          <button id="{uid}" style="
+              padding:.6rem 1rem;border:1px solid #ddd;border-radius:8px;
+              background:#f7f7f7;cursor:pointer;font-weight:600;">
+            {label}
+          </button>
+          <span id="{uid}_msg" style="color:#666;font-size:12px;"></span>
+        </div>
+        <script>
+        const btn  = document.getElementById("{uid}");
+        const msg  = document.getElementById("{uid}_msg");
+        const text = {payload};
+        btn.addEventListener('click', async () => {{
+          try {{
+            await navigator.clipboard.writeText(text);
+            btn.textContent = "✅ Copiado";
+            msg.textContent = "Listo para pegar";
+            setTimeout(() => {{
+              btn.textContent = "{label}";
+              msg.textContent = "";
+            }}, 1600);
+          }} catch (e) {{
+            btn.textContent = "❌ Error";
+            msg.textContent = "Permití el acceso al portapapeles e intentá de nuevo";
+            setTimeout(() => {{
+              btn.textContent = "{label}";
+              msg.textContent = "";
+            }}, 2200);
+          }}
+        }});
+        </script>
+        """,
+        height=60,
+    )
 
 # ===================== SOLAPA PRESUPUESTO =====================
 def solapa_presupuesto(precios_df, costos_df, clave_estado, titulo):
@@ -198,7 +244,6 @@ def solapa_presupuesto(precios_df, costos_df, clave_estado, titulo):
             st.session_state[clave_estado] = []
             raise RerunException(RerunData())
 
-# ===================== RUN PRESUPUESTO =====================
 def run_presupuesto():
     EXCEL_PATH   = str(config.CATALOGO_PATH)
     proveedores  = ["Eze", "Di", "Ale"]
@@ -214,7 +259,7 @@ def run_presupuesto():
     precios10_df = pd.read_excel(EXCEL_PATH, sheet_name="10%")
     solapa_presupuesto(precios10_df, costos_df, "presupuesto_items", "Presupuesto")
 
-# ===================== RUN PEDIDOS (MISMA LÍNEA) =====================
+# ===================== RUN PEDIDOS =====================
 def run_pedidos():
     if "pedido_items" not in st.session_state:
         st.session_state["pedido_items"] = []
@@ -235,7 +280,6 @@ def run_pedidos():
 
     df_cat = utils.load_catalogue()
 
-    # flujo búsqueda/manual idéntico al anterior...
     if not manual:
         busq = st.text_input("Marca o modelo", key="item_busqueda").strip().upper()
         df_fil = df_cat.copy()
@@ -247,7 +291,6 @@ def run_pedidos():
     else:
         df_fil = df_cat.copy()
 
-    # Agregar ítem (igual que antes)
     cols = st.columns([2,2,2,1,2,1])
     if manual:
         marca     = cols[0].text_input("Marca", key="item_marca_manual")
@@ -289,7 +332,7 @@ def run_pedidos():
                 st.session_state["pedido_items"].pop(idx)
                 st.experimental_rerun()
 
-    # === DATOS DEL PEDIDO EN UNA MISMA LÍNEA ===
+    # Datos del pedido
     row = st.columns(9)
     direccion   = row[0].text_input("Dirección", key="np_direccion")
     localidad   = row[1].text_input("Localidad", key="np_localidad")
@@ -329,10 +372,179 @@ def run_pedidos():
             st.session_state["pedido_confirmar"] = False
             st.experimental_rerun()
 
+# ===================== LISTADOS (Ajuste de precios) =====================
+# --- Regex y helpers del módulo de ajuste ---
+_NUM_TOKEN = r"""
+    (?:
+        [0-9]{1,3}(?:[.,\s][0-9]{3})+   # 1.234 | 1,234 | 1 234
+        (?:[.,][0-9]+)?                 # decimales opcionales
+        |
+        [0-9]+(?:[.,][0-9]+)?           # 1200 | 1200,50
+    )
+"""
+CURRENCY_SYMBOLS_RE = re.compile(
+    rf'(?:USD|US\$|U\$S|USS|\$|💲)\s*({_NUM_TOKEN})',
+    re.IGNORECASE | re.VERBOSE
+)
+BARE_NUMBER_AT_END_RE = re.compile(
+    rf'(?<![A-Za-z])({_NUM_TOKEN})\s*$',
+    re.IGNORECASE | re.VERBOSE
+)
+SYMBOL_NORMALIZER_RE = re.compile(r'(?i)\b(?:US\$|U\$S|USD|USS)\b')
+
+def _parse_number(num_str: str) -> float:
+    s = num_str.strip().replace(' ', '')
+    has_comma = ',' in s
+    has_dot   = '.' in s
+    if has_comma and has_dot:
+        if s.rfind(',') > s.rfind('.'):
+            s = s.replace('.', '')
+            s = s.replace(',', '.')
+        else:
+            s = s.replace(',', '')
+    elif has_comma and not has_dot:
+        s = s.replace('.', '')
+        s = s.replace(',', '.')
+    return float(s)
+
+def _round_up_to_base(x: float, base: int) -> int:
+    import math
+    if base <= 0:
+        base = 1
+    return int(math.ceil(x / base) * base)
+
+def _apply_rules(val: float, pct: float, min_inc_usd: float, base_mult: int) -> int:
+    inc_pct   = val * (pct / 100.0)
+    inc_final = max(inc_pct, float(min_inc_usd))
+    val_adj   = val + inc_final
+    return _round_up_to_base(val_adj, base=base_mult)
+
+def _normalize_usd(text: str) -> str:
+    out = SYMBOL_NORMALIZER_RE.sub('USD', text)
+    out = out.replace('💲', 'USD').replace('$', 'USD')
+    out = re.sub(r'\bUSD\s*USD\b', 'USD', out)
+    return out
+
+def _fmt_usd_block(value_int: int) -> str:
+    # punto como separador de miles, sin decimales, con un espacio antes
+    formatted = f"{value_int:,}".replace(",", ".")
+    return f" *USD{formatted}*"
+
+def _adjust_line_replace(line: str, pct: float, min_inc_usd: float, base_mult: int) -> tuple[str, bool]:
+    replaced_any = False
+
+    def _repl(m):
+        nonlocal replaced_any
+        replaced_any = True
+        try:
+            val = _parse_number(m.group(1))
+        except ValueError:
+            return m.group(0)
+        return _fmt_usd_block(_apply_rules(val, pct, min_inc_usd, base_mult))
+
+    out = CURRENCY_SYMBOLS_RE.sub(_repl, line)
+    if not replaced_any and not re.search(r'(USD|US\$|U\$S|USS|\$|💲)', out, re.IGNORECASE):
+        def _bare(m):
+            nonlocal replaced_any
+            replaced_any = True
+            try:
+                val = _parse_number(m.group(1))
+            except ValueError:
+                return m.group(0)
+            return _fmt_usd_block(_apply_rules(val, pct, min_inc_usd, base_mult))
+        out = BARE_NUMBER_AT_END_RE.sub(_bare, out)
+
+    out = _normalize_usd(out)
+    out = re.sub(r'\s+\*USD', ' *USD', out)
+    return out, replaced_any
+
+def _process_text_block(text: str, pct: float, min_inc_usd: float, base_mult: int, only_changed: bool) -> tuple[str, int]:
+    out_lines, changed_count = [], 0
+    for ln in text.splitlines():
+        new_ln, changed = _adjust_line_replace(ln, pct, min_inc_usd, base_mult)
+        if changed:
+            changed_count += 1
+            out_lines.append(new_ln)
+        else:
+            if not only_changed:
+                out_lines.append(new_ln)
+    return "\n".join(out_lines), changed_count
+
+def run_listados():
+    st.subheader("Listados (ajuste de precios)")
+    st.caption("Reemplaza SIEMPRE el precio y lo deja como  *USDX.XXX*  (punto de miles).")
+
+    DEFAULT_MIN_INC_USD = 30.0
+    DEFAULT_BASE_MULT   = 5
+    DEFAULT_PCT         = 10.0
+
+    with st.form("form_listados"):
+        c1, c2, c3 = st.columns(3)
+        pct = c1.number_input("Porcentaje de aumento (%)", min_value=0.0, max_value=1000.0,
+                              value=DEFAULT_PCT, step=0.5, format="%.2f")
+        min_inc_usd = c2.number_input("Mínimo por ítem (USD)", min_value=0.0, max_value=10000.0,
+                                      value=DEFAULT_MIN_INC_USD, step=1.0, format="%.0f")
+        base_mult = int(c3.number_input("Múltiplo de redondeo", min_value=1, max_value=100,
+                                        value=DEFAULT_BASE_MULT, step=1))
+        only_changed = st.checkbox("Mostrar solo líneas con cambios", value=False)
+
+        texto_in = st.text_area(
+            "Pegá aquí la lista original",
+            value="",
+            height=280,
+            placeholder=(
+                "Ejemplos:\n"
+                "MINI 7TH 128GB💲535\n"
+                "⚠️PENCIL 2 105\n"
+                "📲IPAD 11 (A16) 256GB 495\n"
+                "US$ 1.250\n"
+                "U$S 1,250.50\n"
+            )
+        )
+        colb = st.columns([1,1,2])
+        procesar = colb[0].form_submit_button("Procesar ✅")
+        limpiar  = colb[1].form_submit_button("🧹 Limpiar")
+
+    if 'listados_output' not in st.session_state:
+        st.session_state['listados_output'] = ""
+        st.session_state['listados_count']  = 0
+
+    if limpiar:
+        st.session_state['listados_output'] = ""
+        st.session_state['listados_count']  = 0
+        st.success("Formulario limpiado.")
+
+    if procesar:
+        if not texto_in.strip():
+            st.warning("Pegá la lista en el recuadro para procesarla.")
+        else:
+            resultado, cant = _process_text_block(
+                texto_in, pct,
+                min_inc_usd=min_inc_usd,
+                base_mult=base_mult,
+                only_changed=only_changed
+            )
+            st.session_state['listados_output'] = resultado
+            st.session_state['listados_count']  = cant
+
+    if st.session_state['listados_output']:
+        st.success(f"¡Listo! Se ajustaron {st.session_state['listados_count']} línea(s). Copiá o descargá.")
+        st.code(st.session_state['listados_output'], language="text")
+        copy_to_clipboard_button(st.session_state['listados_output'], label="📋 Copiar resultado")
+        st.download_button(
+            "⬇️ Descargar como TXT",
+            data=st.session_state['listados_output'].encode("utf-8"),
+            file_name="lista_ajustada.txt",
+            mime="text/plain",
+            use_container_width=True,
+        )
+
 # ===================== INTERFAZ PRINCIPAL =====================
 st.title("DRB Electro")
-tab1, tab2 = st.tabs(["Presupuesto", "Nuevo Pedido"])
+tab1, tab2, tab3 = st.tabs(["Presupuesto", "Nuevo Pedido", "Listados"])
 with tab1:
     run_presupuesto()
 with tab2:
     run_pedidos()
+with tab3:
+    run_listados()
