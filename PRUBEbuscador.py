@@ -122,7 +122,7 @@ def solapa_presupuesto(precios_df, costos_df, clave_estado, titulo):
         )
         col_p, col_cost, col_blue = st.columns(3)
         prov_m = col_p.selectbox("Proveedor", opts, key=f"{clave_estado}_man_prov") if opts \
-                 else col_p.text_input("Proveedor", key=f"{clave_estado}_man_prov")
+                 else col_p.text_input("Proveedor", key=f"{clave_estado}_man_prov}")
 
         mask_c  = (costos_df["Marca"]==marca_m)&(costos_df["Modelo"]==modelo_m)&(costos_df["Proveedor"]==prov_m)
         mask_cm = (costos_df["Marca"]==marca_m)&(costos_df["Modelo"]==modelo_m)
@@ -142,7 +142,7 @@ def solapa_presupuesto(precios_df, costos_df, clave_estado, titulo):
         pct_m    = g1.number_input("% Ganancia", min_value=0.0, format="%.2f",
                                    value=10.0, key=f"{clave_estado}_man_pct")
         desc_m   = g2.number_input("Descuento USD", min_value=0.0, format="%.2f",
-                                   key=f"{clave_estado}_man_desc")
+                                   key=f"{clave_estado}_man_desc}")
         moneda_m = g3.selectbox("Moneda", ["USD", "Pesos", "Ambos"],
                                 key=f"{clave_estado}_man_moneda")
 
@@ -372,39 +372,63 @@ def run_pedidos():
             st.session_state["pedido_confirmar"] = False
             st.experimental_rerun()
 
-# ===================== LISTADOS (Ajuste de precios) =====================
-# --- Regex y helpers del módulo de ajuste ---
-_NUM_TOKEN = r"""
+# ===================== LISTADOS (Ajuste de precios: SOLO precio) =====================
+# --- Regex y helpers del módulo de ajuste (versión minimalista que solo reemplaza precios) ---
+
+# Token numérico tolerante: 1.234 | 1,234 | 1200,50 | 1200.50 | 1 200
+_L_NUM = r"""
     (?:
-        [0-9]{1,3}(?:[.,\s][0-9]{3})+   # 1.234 | 1,234 | 1 234
-        (?:[.,][0-9]+)?                 # decimales opcionales
+        [0-9]{1,3}(?:[.,\s][0-9]{3})+(?:[.,][0-9]+)?   # miles con opcional decimales
         |
-        [0-9]+(?:[.,][0-9]+)?           # 1200 | 1200,50
+        [0-9]+(?:[.,][0-9]+)?                          # enteros/decimales simples
     )
 """
-CURRENCY_SYMBOLS_RE = re.compile(
-    rf'(?:USD|US\$|U\$S|USS|\$|💲)\s*({_NUM_TOKEN})',
-    re.IGNORECASE | re.VERBOSE
-)
-BARE_NUMBER_AT_END_RE = re.compile(
-    rf'(?<![A-Za-z])({_NUM_TOKEN})\s*$',
-    re.IGNORECASE | re.VERBOSE
-)
-SYMBOL_NORMALIZER_RE = re.compile(r'(?i)\b(?:US\$|U\$S|USD|USS)\b')
 
-def _parse_number(num_str: str) -> float:
+# Monedas soportadas (incluye variantes pegadas): USD, US$, US$D, U$S, U$D, USS, $, 💲
+# Soporta: USD720, 720USD, US$ 720, U$D1390, $720, 💲 720, etc. y también *USD 720*
+PRICE_TOKEN_RE = re.compile(
+    rf"""
+    (?P<full>
+        \*?\s*
+        (?:
+            (?:(?P<cur1>USD|US\$D|US\$|U\$S|U\$D|USS|\$|💲))\s*(?P<num1>{_L_NUM})
+            |
+            (?P<num2>{_L_NUM})\s*(?P<cur2>USD|US\$D|US\$|U\$S|U\$D|USS|\$|💲)
+        )
+        \s*\*?
+    )
+    """,
+    re.IGNORECASE | re.VERBOSE
+)
+
+# Número pelado al FINAL de la línea (fallback si no hay símbolo)
+BARE_NUMBER_AT_END_RE = re.compile(
+    rf'(?<![A-Za-z])({_L_NUM})\s*$',
+    re.IGNORECASE | re.VERBOSE
+)
+
+def _parse_number_general(num_str: str) -> float:
+    """Convierte strings numéricos comunes en float, contemplando miles/decimales."""
     s = num_str.strip().replace(' ', '')
     has_comma = ',' in s
     has_dot   = '.' in s
     if has_comma and has_dot:
+        # El último separador encontrado decide decimal
         if s.rfind(',') > s.rfind('.'):
             s = s.replace('.', '')
             s = s.replace(',', '.')
         else:
             s = s.replace(',', '')
     elif has_comma and not has_dot:
-        s = s.replace('.', '')
-        s = s.replace(',', '.')
+        parts = s.split(',')
+        if len(parts) >= 2 and all(len(p) == 3 for p in parts[1:]) and 1 <= len(parts[0]) <= 3:
+            s = ''.join(parts)           # 1,234 -> 1234
+        else:
+            s = s.replace(',', '.')      # 1200,50 -> 1200.50
+    elif has_dot and not has_comma:
+        parts = s.split('.')
+        if len(parts) >= 2 and all(len(p) == 3 for p in parts[1:]) and 1 <= len(parts[0]) <= 3:
+            s = ''.join(parts)           # 1.234 -> 1234
     return float(s)
 
 def _round_up_to_base(x: float, base: int) -> int:
@@ -413,92 +437,123 @@ def _round_up_to_base(x: float, base: int) -> int:
         base = 1
     return int(math.ceil(x / base) * base)
 
-def _apply_rules(val: float, pct: float, min_inc_usd: float, base_mult: int) -> int:
+def _apply_rules_only_price(val: float, pct: float, min_inc_usd: float, base_mult: int) -> int:
     inc_pct   = val * (pct / 100.0)
     inc_final = max(inc_pct, float(min_inc_usd))
     val_adj   = val + inc_final
     return _round_up_to_base(val_adj, base=base_mult)
 
-def _normalize_usd(text: str) -> str:
-    out = SYMBOL_NORMALIZER_RE.sub('USD', text)
-    out = out.replace('💲', 'USD').replace('$', 'USD')
-    out = re.sub(r'\bUSD\s*USD\b', 'USD', out)
-    return out
-
 def _fmt_usd_block(value_int: int) -> str:
-    # punto como separador de miles, sin decimales, con un espacio antes
+    """Formatea como  *USD X.XXX*  (punto de miles, sin decimales)."""
     formatted = f"{value_int:,}".replace(",", ".")
-    return f" *USD{formatted}*"
+    return f" *USD {formatted}*"
 
-def _adjust_line_replace(line: str, pct: float, min_inc_usd: float, base_mult: int) -> tuple[str, bool]:
-    replaced_any = False
+def _replace_symbol_prices(line: str, pct: float, min_inc_usd: float, base_mult: int) -> tuple[str, bool]:
+    """Reemplaza TODOS los tokens con símbolo/moneda por *USD X.XXX* sin tocar el resto del texto."""
+    changed = False
 
-    def _repl(m):
-        nonlocal replaced_any
-        replaced_any = True
+    def _repl(m: re.Match) -> str:
+        nonlocal changed
+        num = m.group('num1') or m.group('num2')
         try:
-            val = _parse_number(m.group(1))
+            val = _parse_number_general(num)
         except ValueError:
-            return m.group(0)
-        return _fmt_usd_block(_apply_rules(val, pct, min_inc_usd, base_mult))
+            return m.group('full')  # no tocar si no parsea
+        changed = True
+        new_int = _apply_rules_only_price(val, pct, min_inc_usd, base_mult)
+        return _fmt_usd_block(new_int)
 
-    out = CURRENCY_SYMBOLS_RE.sub(_repl, line)
-    if not replaced_any and not re.search(r'(USD|US\$|U\$S|USS|\$|💲)', out, re.IGNORECASE):
-        def _bare(m):
-            nonlocal replaced_any
-            replaced_any = True
-            try:
-                val = _parse_number(m.group(1))
-            except ValueError:
-                return m.group(0)
-            return _fmt_usd_block(_apply_rules(val, pct, min_inc_usd, base_mult))
-        out = BARE_NUMBER_AT_END_RE.sub(_bare, out)
+    out = PRICE_TOKEN_RE.sub(_repl, line)
+    # Asegurar un solo espacio antes de *USD y compactar espacios
+    out = re.sub(r'\s*\*USD', ' *USD', out)
+    out = re.sub(r'\s{2,}', ' ', out).rstrip()
+    return out, changed
 
-    out = _normalize_usd(out)
-    out = re.sub(r'\s+\*USD', ' *USD', out)
-    return out, replaced_any
+def _replace_bare_trailing(line: str, pct: float, min_inc_usd: float, base_mult: int,
+                           bare_min_value: float) -> tuple[str, bool]:
+    """Si no había símbolo: reemplaza número pelado FINAL como precio (si supera umbral)."""
+    m = BARE_NUMBER_AT_END_RE.search(line)
+    if not m:
+        return line, False
+    num_str = m.group(1)
+    try:
+        val = _parse_number_general(num_str)
+    except ValueError:
+        return line, False
+    if val < float(bare_min_value):
+        return line, False
+    new_int = _apply_rules_only_price(val, pct, min_inc_usd, base_mult)
+    out = line[:m.start()] + _fmt_usd_block(new_int)
+    out = re.sub(r'\s*\*USD', ' *USD', out)
+    out = re.sub(r'\s{2,}', ' ', out).rstrip()
+    return out, True
 
-def _process_text_block(text: str, pct: float, min_inc_usd: float, base_mult: int, only_changed: bool) -> tuple[str, int]:
+def _adjust_line_only_price(line: str, pct: float, min_inc_usd: float, base_mult: int,
+                            bare_min_value: float) -> tuple[str, bool]:
+    """
+    SOLO toca precios. No limpia emojis, no reordena texto.
+    1) Reemplaza TODOS los tokens con moneda (USD, US$, US$D, U$S, U$D, $, 💲) pegados o no.
+    2) Si no encontró, intenta con número pelado al final (si supera el umbral).
+    """
+    out, changed = _replace_symbol_prices(line, pct, min_inc_usd, base_mult)
+    if changed:
+        return out, True
+    return _replace_bare_trailing(out, pct, min_inc_usd, base_mult, bare_min_value)
+
+def _process_text_block_only_price(text: str, pct: float, min_inc_usd: float, base_mult: int,
+                                   only_changed: bool, bare_min_value: float) -> tuple[str, int]:
     out_lines, changed_count = [], 0
     for ln in text.splitlines():
-        new_ln, changed = _adjust_line_replace(ln, pct, min_inc_usd, base_mult)
+        new_ln, changed = _adjust_line_only_price(ln, pct, min_inc_usd, base_mult, bare_min_value)
         if changed:
             changed_count += 1
             out_lines.append(new_ln)
         else:
             if not only_changed:
-                out_lines.append(new_ln)
+                out_lines.append(ln)
     return "\n".join(out_lines), changed_count
 
 def run_listados():
-    st.subheader("Listados (ajuste de precios)")
-    st.caption("Reemplaza SIEMPRE el precio y lo deja como  *USDX.XXX*  (punto de miles).")
+    st.subheader("Listados (ajuste de precios – solo precio)")
+    st.caption("No modifica el texto original. Solo detecta y reemplaza precios por  *USD X.XXX*  (punto de miles).")
 
     DEFAULT_MIN_INC_USD = 30.0
     DEFAULT_BASE_MULT   = 5
     DEFAULT_PCT         = 10.0
+    DEFAULT_BARE_MIN    = 100.0  # evita confundir 'IPHONE 13' como precio si no hay símbolo
+
+    # Estado para limpiar el textarea sin error
+    if 'listados_textarea_nonce' not in st.session_state:
+        st.session_state['listados_textarea_nonce'] = 0
+    TEXTAREA_KEY = f"listados_text__{st.session_state['listados_textarea_nonce']}"
 
     with st.form("form_listados"):
-        c1, c2, c3 = st.columns(3)
+        c1, c2, c3, c4 = st.columns(4)
         pct = c1.number_input("Porcentaje de aumento (%)", min_value=0.0, max_value=1000.0,
                               value=DEFAULT_PCT, step=0.5, format="%.2f")
         min_inc_usd = c2.number_input("Mínimo por ítem (USD)", min_value=0.0, max_value=10000.0,
                                       value=DEFAULT_MIN_INC_USD, step=1.0, format="%.0f")
         base_mult = int(c3.number_input("Múltiplo de redondeo", min_value=1, max_value=100,
                                         value=DEFAULT_BASE_MULT, step=1))
+        bare_min_value = c4.number_input("Umbral núm. pelado (USD)", min_value=0.0, max_value=10000.0,
+                                         value=DEFAULT_BARE_MIN, step=5.0,
+                                         help="Si no hay símbolo y el número final es menor a este valor, NO lo toma como precio (evita 'iPhone 13').")
+
         only_changed = st.checkbox("Mostrar solo líneas con cambios", value=False)
 
-        texto_in = st.text_area(
+        st.text_area(
             "Pegá aquí la lista original",
-            value="",
+            key=TEXTAREA_KEY,
             height=280,
             placeholder=(
                 "Ejemplos:\n"
-                "MINI 7TH 128GB💲535\n"
-                "⚠️PENCIL 2 105\n"
-                "📲IPAD 11 (A16) 256GB 495\n"
+                "IPHONE 13 128GB MIDNIGHT - STARLIGHT 490\n"
                 "US$ 1.250\n"
-                "U$S 1,250.50\n"
+                "U$D1390\n"
+                "USD720\n"
+                "💲 535\n"
+                "$690\n"
+                "Precio al final sin símbolo 480\n"
             )
         )
         colb = st.columns([1,1,2])
@@ -512,17 +567,20 @@ def run_listados():
     if limpiar:
         st.session_state['listados_output'] = ""
         st.session_state['listados_count']  = 0
-        st.success("Formulario limpiado.")
+        st.session_state['listados_textarea_nonce'] += 1  # borra textarea
+        raise RerunException(RerunData())
 
     if procesar:
+        texto_in = st.session_state.get(TEXTAREA_KEY, "")
         if not texto_in.strip():
             st.warning("Pegá la lista en el recuadro para procesarla.")
         else:
-            resultado, cant = _process_text_block(
+            resultado, cant = _process_text_block_only_price(
                 texto_in, pct,
                 min_inc_usd=min_inc_usd,
                 base_mult=base_mult,
-                only_changed=only_changed
+                only_changed=only_changed,
+                bare_min_value=bare_min_value
             )
             st.session_state['listados_output'] = resultado
             st.session_state['listados_count']  = cant
