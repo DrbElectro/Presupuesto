@@ -122,7 +122,7 @@ def solapa_presupuesto(precios_df, costos_df, clave_estado, titulo):
         )
         col_p, col_cost, col_blue = st.columns(3)
         prov_m = col_p.selectbox("Proveedor", opts, key=f"{clave_estado}_man_prov") if opts \
-                 else col_p.text_input("Proveedor", key=f"{clave_estado}_man_prov}")
+                 else col_p.text_input("Proveedor", key=f"{clave_estado}_man_prov")
 
         mask_c  = (costos_df["Marca"]==marca_m)&(costos_df["Modelo"]==modelo_m)&(costos_df["Proveedor"]==prov_m)
         mask_cm = (costos_df["Marca"]==marca_m)&(costos_df["Modelo"]==modelo_m)
@@ -606,3 +606,4 @@ with tab2:
     run_pedidos()
 with tab3:
     run_listados()
+
