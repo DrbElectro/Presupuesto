@@ -142,7 +142,7 @@ def solapa_presupuesto(precios_df, costos_df, clave_estado, titulo):
         pct_m    = g1.number_input("% Ganancia", min_value=0.0, format="%.2f",
                                    value=10.0, key=f"{clave_estado}_man_pct")
         desc_m   = g2.number_input("Descuento USD", min_value=0.0, format="%.2f",
-                                   key=f"{clave_estado}_man_desc}")
+                                   key=f"{clave_estado}_man_desc}"
         moneda_m = g3.selectbox("Moneda", ["USD", "Pesos", "Ambos"],
                                 key=f"{clave_estado}_man_moneda")
 
@@ -606,4 +606,5 @@ with tab2:
     run_pedidos()
 with tab3:
     run_listados()
+
 
