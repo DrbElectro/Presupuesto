@@ -121,8 +121,12 @@ def solapa_presupuesto(precios_df, costos_df, clave_estado, titulo):
             ]["Proveedor"].dropna().unique()
         )
         col_p, col_cost, col_blue = st.columns(3)
-        prov_m = col_p.selectbox("Proveedor", opts, key=f"{clave_estado}_man_prov") if opts \
-                 else col_p.text_input("Proveedor", key=f"{clave_estado}_man_prov")
+        # ✅ corregido: sin '}' extra y usando paréntesis
+        prov_m = (
+            col_p.selectbox("Proveedor", opts, key=f"{clave_estado}_man_prov")
+            if opts
+            else col_p.text_input("Proveedor", key=f"{clave_estado}_man_prov")
+        )
 
         mask_c  = (costos_df["Marca"]==marca_m)&(costos_df["Modelo"]==modelo_m)&(costos_df["Proveedor"]==prov_m)
         mask_cm = (costos_df["Marca"]==marca_m)&(costos_df["Modelo"]==modelo_m)
@@ -141,8 +145,9 @@ def solapa_presupuesto(precios_df, costos_df, clave_estado, titulo):
         g1, g2, g3 = st.columns(3)
         pct_m    = g1.number_input("% Ganancia", min_value=0.0, format="%.2f",
                                    value=10.0, key=f"{clave_estado}_man_pct")
+        # ✅ corregido: llaves balanceadas
         desc_m   = g2.number_input("Descuento USD", min_value=0.0, format="%.2f",
-                                   key=f"{clave_estado}_man_desc}"
+                                   key=f"{clave_estado}_man_desc")
         moneda_m = g3.selectbox("Moneda", ["USD", "Pesos", "Ambos"],
                                 key=f"{clave_estado}_man_moneda")
 
@@ -549,6 +554,7 @@ def run_listados():
                 "Ejemplos:\n"
                 "IPHONE 13 128GB MIDNIGHT - STARLIGHT 490\n"
                 "US$ 1.250\n"
+                "US$D720\n"
                 "U$D1390\n"
                 "USD720\n"
                 "💲 535\n"
@@ -606,5 +612,3 @@ with tab2:
     run_pedidos()
 with tab3:
     run_listados()
-
-
